@@ -1,19 +1,25 @@
+// Hand-rolled formatting (Norwegian style: space groups, comma decimals).
+// Intl output differs between Node and browsers, which breaks hydration.
+
+function groupDigits(value: number, decimals: number): string {
+  const fixed = Math.abs(value).toFixed(decimals);
+  const [int, frac] = fixed.split(".");
+  const grouped = int!.replace(/\B(?=(\d{3})+(?!\d))/g, "\u00A0");
+  return (value < 0 ? "\u2212" : "") + grouped + (frac ? `,${frac}` : "");
+}
+
+export function formatNumber(value: number, decimals = 0): string {
+  return groupDigits(value, decimals);
+}
+
 export function formatCash(amount: number, currency: string): string {
   const decimals = Math.abs(amount % 1) > 0.005 ? 2 : 0;
-  try {
-    return new Intl.NumberFormat("nb-NO", {
-      style: "currency",
-      currency,
-      minimumFractionDigits: decimals,
-      maximumFractionDigits: decimals,
-    }).format(amount);
-  } catch {
-    return `${amount.toFixed(decimals)} ${currency}`;
-  }
+  const suffix = currency === "NOK" ? "kr" : currency;
+  return `${groupDigits(amount, decimals)}\u00A0${suffix}`;
 }
 
 export function formatChips(chips: number): string {
-  return new Intl.NumberFormat("nb-NO", { maximumFractionDigits: 0 }).format(chips);
+  return groupDigits(Math.round(chips), 0);
 }
 
 export function formatSignedCash(amount: number, currency: string): string {

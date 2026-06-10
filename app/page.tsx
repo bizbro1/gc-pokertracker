@@ -22,7 +22,7 @@ export default async function HomePage() {
   let sessions: Awaited<ReturnType<typeof listSessions>> = [];
   let dbError: string | null = null;
   try {
-    sessions = await listSessions();
+    sessions = await listSessions(["setup", "active"]);
   } catch (e) {
     dbError = e instanceof Error ? e.message : "Could not reach the database";
   }
@@ -54,7 +54,7 @@ export default async function HomePage() {
 
       <section className="mt-16">
         <h2 className="mb-4 text-[11px] uppercase tracking-[0.3em] text-cream-dim">
-          The Ledger
+          Open Tables
         </h2>
 
         {dbError ? (
@@ -64,9 +64,13 @@ export default async function HomePage() {
           </Card>
         ) : sessions.length === 0 ? (
           <Card className="px-5 py-10 text-center">
-            <p className="font-display text-2xl text-brass-dim">The book is empty.</p>
+            <p className="font-display text-2xl text-brass-dim">No open tables tonight.</p>
             <p className="mt-2 text-sm text-cream-dim">
-              Open a new table to deal the first hand.
+              Open a new table, or browse past nights in{" "}
+              <Link href="/history" className="text-brass hover:text-brass-bright">
+                History
+              </Link>
+              .
             </p>
           </Card>
         ) : (

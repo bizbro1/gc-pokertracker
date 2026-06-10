@@ -8,6 +8,7 @@ import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader, PnL, StatusBadge } from "@/components/ui";
 import { SessionTimer } from "@/components/SessionTimer";
+import { MyChipCount } from "@/components/MyChipCount";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,10 @@ export default async function PlayerView({
           </div>
         </div>
       </Card>
+
+      {session.status !== "ended" && me.status === "active" && (
+        <MyChipCount sessionId={id} />
+      )}
 
       {/* The table */}
       <Card className="mt-6">

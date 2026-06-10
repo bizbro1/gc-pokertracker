@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createSession } from "@/lib/actions";
-import { formatCash, formatChips } from "@/lib/format";
+import { formatCash, formatChips, formatNumber } from "@/lib/format";
 import { Button, Card, CardHeader, Input, Label, Textarea } from "@/components/ui";
 
 function SubmitButton() {
@@ -95,7 +95,7 @@ export function NewSessionForm() {
               </span>
             </p>
             <p className="mt-1 text-[11px] text-cream-dim tabular-nums">
-              1 {currency || "NOK"} &asymp; {ratio.toLocaleString("nb-NO", { maximumFractionDigits: 2 })} chips
+              1 {currency || "NOK"} &asymp; {formatNumber(ratio, ratio % 1 ? 2 : 0)} chips
             </p>
           </div>
 

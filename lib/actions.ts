@@ -186,19 +186,34 @@ export async function joinSession(joinCode: string, name: string): Promise<{ err
     if (existing) redirect(`/session/${session.id}/me`);
   }
 
-  const { data: player, error } = await db
+  // Same name at this table? Continue as that player instead of duplicating.
+  const { data: existingPlayers } = await db
     .from("players")
-    .insert({ session_id: session.id, name: trimmed })
-    .select("id")
-    .single();
-  if (error || !player) return { error: error?.message ?? "Could not join" };
+    .select("id, name")
+    .eq("session_id", session.id);
+  const match = (existingPlayers ?? []).find(
+    (p) => p.name.trim().toLowerCase() === trimmed.toLowerCase()
+  );
+
+  let playerId: string;
+  if (match) {
+    playerId = match.id;
+  } else {
+    const { data: player, error } = await db
+      .from("players")
+      .insert({ session_id: session.id, name: trimmed })
+      .select("id")
+      .single();
+    if (error || !player) return { error: error?.message ?? "Could not join" };
+    playerId = player.id;
+  }
 
   const player_key = generateSecretKey();
   const { error: keyError } = await db
     .from("player_keys")
-    .insert({ player_id: player.id, player_key });
+    .upsert({ player_id: playerId, player_key });
   if (keyError) {
-    await db.from("players").delete().eq("id", player.id);
+    if (!match) await db.from("players").delete().eq("id", playerId);
     return { error: keyError.message };
   }
 
@@ -296,25 +311,86 @@ export async function addBuyIn(
   }
 }
 
-export async function adjustChips(
+async function currentChipsOf(playerId: string): Promise<number> {
+  const { data, error } = await supabaseAdmin()
+    .from("transactions")
+    .select("type, chip_amount")
+    .eq("player_id", playerId);
+  if (error) throw new Error(error.message);
+  let chips = 0;
+  for (const t of data ?? []) {
+    if (t.type === "buy_in" || t.type === "adjustment") chips += Number(t.chip_amount);
+    else if (t.type === "cash_out") chips -= Number(t.chip_amount);
+  }
+  return chips;
+}
+
+/** Set a player's counted chip total; stored as an adjustment for the delta. */
+async function applyChipCount(sessionId: string, playerId: string, totalChips: number): Promise<ActionResult> {
+  if (!Number.isFinite(totalChips) || totalChips < 0)
+    return { ok: false, error: "Chip count must be zero or more" };
+
+  const current = await currentChipsOf(playerId);
+  const delta = Math.round(totalChips) - current;
+  if (delta === 0) return { ok: true };
+
+  const { error } = await supabaseAdmin().from("transactions").insert({
+    session_id: sessionId,
+    player_id: playerId,
+    type: "adjustment",
+    cash_amount: 0,
+    chip_amount: delta,
+  });
+  if (error) throw new Error(error.message);
+  refresh(sessionId);
+  return { ok: true };
+}
+
+export async function setChipCount(
   sessionId: string,
   playerId: string,
-  chipDelta: number
+  totalChips: number
 ): Promise<ActionResult> {
   try {
     await requireHost(sessionId);
-    if (!Number.isFinite(chipDelta) || chipDelta === 0)
-      return { ok: false, error: "Adjustment cannot be zero" };
-    const { error } = await supabaseAdmin().from("transactions").insert({
-      session_id: sessionId,
-      player_id: playerId,
-      type: "adjustment",
-      cash_amount: 0,
-      chip_amount: Math.round(chipDelta),
-    });
-    if (error) throw new Error(error.message);
-    refresh(sessionId);
-    return { ok: true };
+    return await applyChipCount(sessionId, playerId, totalChips);
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+/** Player counts their own stack from their phone. Only affects their own row. */
+export async function setMyChipCount(
+  sessionId: string,
+  totalChips: number
+): Promise<ActionResult> {
+  try {
+    const jar = await cookies();
+    const playerKey = jar.get(playerCookieName(sessionId))?.value;
+    if (!playerKey) return { ok: false, error: "You are not seated at this table" };
+
+    const db = supabaseAdmin();
+    const { data: keyRow } = await db
+      .from("player_keys")
+      .select("player_id")
+      .eq("player_key", playerKey)
+      .single();
+    if (!keyRow) return { ok: false, error: "You are not seated at this table" };
+
+    const { data: player } = await db
+      .from("players")
+      .select("id, session_id, status")
+      .eq("id", keyRow.player_id)
+      .single();
+    if (!player || player.session_id !== sessionId)
+      return { ok: false, error: "You are not seated at this table" };
+    if (player.status === "cashed_out")
+      return { ok: false, error: "You have already cashed out" };
+
+    const session = await getSession(sessionId);
+    if (session.status === "ended") return { ok: false, error: "The session has ended" };
+
+    return await applyChipCount(sessionId, player.id, totalChips);
   } catch (e) {
     return fail(e);
   }

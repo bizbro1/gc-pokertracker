@@ -108,9 +108,13 @@ export default async function SessionDashboard({
         <div className="space-y-6">
           <InvitePanel joinCode={session.join_code} disabled={session.status === "ended"} />
           <Card>
-            <CardHeader title="Seating" subtitle="Assign seats from each player's row" />
+            <CardHeader title="Seating" subtitle="Tap a seat to assign a player" />
             <div className="px-4 py-5">
-              <SeatMap players={players} />
+              <SeatMap
+                sessionId={id}
+                players={players}
+                interactive={session.status !== "ended"}
+              />
             </div>
           </Card>
           {session.status === "ended" && (

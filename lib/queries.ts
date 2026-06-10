@@ -6,13 +6,36 @@ export interface SessionListItem extends Session {
   players: { count: number }[];
 }
 
-export async function listSessions(): Promise<SessionListItem[]> {
-  const { data, error } = await supabaseAdmin()
+export async function listSessions(statuses?: string[]): Promise<SessionListItem[]> {
+  let query = supabaseAdmin()
     .from("sessions")
     .select("*, players(count)")
     .order("created_at", { ascending: false });
+  if (statuses?.length) query = query.in("status", statuses);
+  const { data, error } = await query;
   if (error) throw new Error(error.message);
   return (data ?? []) as SessionListItem[];
+}
+
+export interface AllData {
+  sessions: Session[];
+  players: Player[];
+  txs: Tx[];
+}
+
+/** Everything in the club's books — used for cross-session rankings. */
+export async function getAllData(): Promise<AllData> {
+  const db = supabaseAdmin();
+  const [sessionsRes, playersRes, txsRes] = await Promise.all([
+    db.from("sessions").select("*").order("created_at", { ascending: false }),
+    db.from("players").select("*"),
+    db.from("transactions").select("*"),
+  ]);
+  return {
+    sessions: (sessionsRes.data ?? []) as Session[],
+    players: (playersRes.data ?? []) as Player[],
+    txs: (txsRes.data ?? []) as Tx[],
+  };
 }
 
 export interface SessionBundle {
