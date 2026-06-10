@@ -5,6 +5,7 @@ import { useFormStatus } from "react-dom";
 import { createSession } from "@/lib/actions";
 import { formatCash, formatChips, formatNumber } from "@/lib/format";
 import { Button, Card, CardHeader, Input, Label, Textarea } from "@/components/ui";
+import { BlindCalculator } from "@/components/BlindCalculator";
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -20,9 +21,23 @@ export function NewSessionForm() {
   const [cashRate, setCashRate] = useState(1000);
   const [chipRate, setChipRate] = useState(20000);
   const [buyIn, setBuyIn] = useState(1000);
+  const [smallBlind, setSmallBlind] = useState(100);
+  const [bigBlind, setBigBlind] = useState(200);
+  const [notes, setNotes] = useState("");
 
   const ratio = cashRate > 0 ? chipRate / cashRate : 0;
   const buyInChips = Math.round(buyIn * ratio);
+
+  function applyBlindStructure(sb: number, bb: number, scheduleText: string) {
+    setSmallBlind(sb);
+    setBigBlind(bb);
+    setNotes((cur) => {
+      // Replace a previously inserted schedule instead of stacking them
+      const idx = cur.indexOf("Blind structure");
+      const base = (idx >= 0 ? cur.slice(0, idx) : cur).trimEnd();
+      return base ? `${base}\n\n${scheduleText}` : scheduleText;
+    });
+  }
 
   return (
     <form action={createSession} className="space-y-6">
@@ -43,6 +58,8 @@ export function NewSessionForm() {
             <Textarea
               id="notes"
               name="notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
               placeholder="House rules, food orders, debts of honour…"
             />
           </div>
@@ -113,11 +130,25 @@ export function NewSessionForm() {
             </div>
             <div>
               <Label htmlFor="small_blind">Small blind</Label>
-              <Input id="small_blind" name="small_blind" type="number" min={0} defaultValue={100} />
+              <Input
+                id="small_blind"
+                name="small_blind"
+                type="number"
+                min={0}
+                value={smallBlind}
+                onChange={(e) => setSmallBlind(Number(e.target.value))}
+              />
             </div>
             <div>
               <Label htmlFor="big_blind">Big blind</Label>
-              <Input id="big_blind" name="big_blind" type="number" min={0} defaultValue={200} />
+              <Input
+                id="big_blind"
+                name="big_blind"
+                type="number"
+                min={0}
+                value={bigBlind}
+                onChange={(e) => setBigBlind(Number(e.target.value))}
+              />
             </div>
           </div>
 
@@ -126,6 +157,8 @@ export function NewSessionForm() {
             <span className="text-brass">{formatChips(buyInChips)} chips</span> for{" "}
             {formatCash(buyIn || 0, currency || "NOK")}. Blinds are in chips.
           </p>
+
+          <BlindCalculator stackChips={buyInChips} onApply={applyBlindStructure} />
         </div>
       </Card>
 
