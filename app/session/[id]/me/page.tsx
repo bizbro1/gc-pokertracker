@@ -6,9 +6,12 @@ import { playerCookieName } from "@/lib/cookie-names";
 import { playerStats } from "@/lib/derive";
 import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
 import { cn } from "@/lib/cn";
-import { Card, CardHeader, PnL, StatusBadge } from "@/components/ui";
+import { Card, PnL, StatusBadge } from "@/components/ui";
 import { SessionTimer } from "@/components/SessionTimer";
 import { MyChipCount } from "@/components/MyChipCount";
+import { Avatar } from "@/components/Avatar";
+import { AvatarUploader } from "@/components/AvatarUploader";
+import { Collapsible } from "@/components/Collapsible";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +24,7 @@ export default async function PlayerView({
   const { id } = await params;
   const bundle = await getSessionBundle(id);
   if (!bundle) notFound();
-  const { session, players, txs } = bundle;
+  const { session, players, txs, avatars } = bundle;
 
   const jar = await cookies();
   const playerId = await getPlayerIdByKey(jar.get(playerCookieName(id))?.value);
@@ -59,6 +62,10 @@ export default async function PlayerView({
       {/* My stack */}
       <Card className="mt-6 overflow-hidden">
         <div className="felt-panel border-b border-felt-edge/60 px-5 py-6 text-center">
+          <div className="mb-3 flex flex-col items-center gap-1.5">
+            <Avatar name={me.name} url={avatars[me.id]} className="h-16 w-16 text-xl" />
+            <AvatarUploader sessionId={id} />
+          </div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-cream-dim">
             {me.name}
             {me.seat ? ` · Seat ${me.seat}` : ""}
@@ -99,8 +106,12 @@ export default async function PlayerView({
       )}
 
       {/* The table */}
-      <Card className="mt-6">
-        <CardHeader title="The Table" subtitle={`${players.length} players seated`} />
+      <Collapsible
+        title="The Table"
+        subtitle={`${players.length} players seated`}
+        defaultOpen
+        className="mt-6"
+      >
         <ul className="divide-y divide-white/5">
           {others.length === 0 && (
             <li className="px-5 py-4 text-sm text-cream-dim">Just you so far.</li>
@@ -109,30 +120,37 @@ export default async function PlayerView({
             <li
               key={player.id}
               className={cn(
-                "flex items-center justify-between px-5 py-3",
+                "flex items-center justify-between gap-3 px-5 py-3",
                 player.status === "cashed_out" && "opacity-50"
               )}
             >
-              <div>
-                <p className="text-sm text-cream">
-                  {player.name}
-                  {player.seat && (
-                    <span className="ml-2 text-[10px] uppercase tracking-wider text-cream-faint">
-                      Seat {player.seat}
-                    </span>
-                  )}
-                </p>
-                <p className="text-[11px] text-cream-dim tabular-nums">
-                  in for {formatCash(stats.buyInCash, session.currency_code)}
-                </p>
+              <div className="flex items-center gap-2.5 min-w-0">
+                <Avatar
+                  name={player.name}
+                  url={avatars[player.id]}
+                  className="h-9 w-9 text-xs shrink-0"
+                />
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-cream">
+                    {player.name}
+                    {player.seat && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wider text-cream-faint">
+                        Seat {player.seat}
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-cream-dim tabular-nums">
+                    in for {formatCash(stats.buyInCash, session.currency_code)}
+                  </p>
+                </div>
               </div>
-              <p className="text-sm tabular-nums text-cream-dim">
+              <p className="text-sm tabular-nums text-cream-dim shrink-0">
                 {formatChips(stats.currentChips)}
               </p>
             </li>
           ))}
         </ul>
-      </Card>
+      </Collapsible>
 
       {session.status === "ended" && (
         <Link

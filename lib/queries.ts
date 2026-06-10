@@ -42,20 +42,38 @@ export interface SessionBundle {
   session: Session;
   players: Player[];
   txs: Tx[];
+  /** playerId -> public avatar URL */
+  avatars: Record<string, string>;
+}
+
+/** playerId -> public avatar URL (files in the avatars bucket are named <playerId>.jpg) */
+export async function getAvatarMap(): Promise<Record<string, string>> {
+  const db = supabaseAdmin();
+  const { data } = await db.storage.from("avatars").list("", { limit: 1000 });
+  const map: Record<string, string> = {};
+  for (const f of data ?? []) {
+    const id = f.name.replace(/\.[a-z0-9]+$/i, "");
+    const { data: pub } = db.storage.from("avatars").getPublicUrl(f.name);
+    const v = f.updated_at ? new Date(f.updated_at).getTime() : 0;
+    map[id] = `${pub.publicUrl}?v=${v}`;
+  }
+  return map;
 }
 
 export async function getSessionBundle(sessionId: string): Promise<SessionBundle | null> {
   const db = supabaseAdmin();
-  const [sessionRes, playersRes, txsRes] = await Promise.all([
+  const [sessionRes, playersRes, txsRes, avatars] = await Promise.all([
     db.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
     db.from("players").select("*").eq("session_id", sessionId).order("created_at"),
     db.from("transactions").select("*").eq("session_id", sessionId).order("created_at"),
+    getAvatarMap(),
   ]);
   if (!sessionRes.data) return null;
   return {
     session: sessionRes.data as Session,
     players: (playersRes.data ?? []) as Player[],
     txs: (txsRes.data ?? []) as Tx[],
+    avatars,
   };
 }
 

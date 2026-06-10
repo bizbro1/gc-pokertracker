@@ -26,7 +26,7 @@ export default async function SessionDashboard({
   const bundle = await getSessionBundle(id);
   if (!bundle) notFound();
 
-  const { session, players, txs } = bundle;
+  const { session, players, txs, avatars } = bundle;
 
   const jar = await cookies();
   const hostKey = jar.get(hostCookieName(id))?.value;
@@ -91,6 +91,7 @@ export default async function SessionDashboard({
               defaultBuyIn={session.default_buy_in_cash}
               rows={rows}
               sessionEnded={session.status === "ended"}
+              avatars={avatars}
             />
           </Card>
 
@@ -114,6 +115,7 @@ export default async function SessionDashboard({
                 sessionId={id}
                 players={players}
                 interactive={session.status !== "ended"}
+                avatars={avatars}
               />
             </div>
           </Card>

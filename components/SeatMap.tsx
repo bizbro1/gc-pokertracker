@@ -21,10 +21,12 @@ export function SeatMap({
   sessionId,
   players,
   interactive,
+  avatars = {},
 }: {
   sessionId: string;
   players: Player[];
   interactive: boolean;
+  avatars?: Record<string, string>;
 }) {
   const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,7 @@ export function SeatMap({
                   setSelectedSeat((cur) => (cur === seatNo ? null : seatNo));
                 }}
                 className={cn(
-                  "mx-auto flex h-9 w-9 items-center justify-center rounded-full border text-[11px] tabular-nums transition",
+                  "mx-auto flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border text-[11px] tabular-nums transition",
                   interactive && "cursor-pointer hover:scale-110",
                   isSelected && "ring-2 ring-brass-bright ring-offset-2 ring-offset-ink",
                   seated
@@ -94,7 +96,21 @@ export function SeatMap({
                 )}
                 title={seated ? `${seatNo}: ${seated.name}` : `Seat ${seatNo}`}
               >
-                {seated ? initials(seated.name) : seatNo}
+                {seated && avatars[seated.id] ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={avatars[seated.id]}
+                    alt={seated.name}
+                    className={cn(
+                      "h-full w-full object-cover",
+                      seated.status === "cashed_out" && "grayscale opacity-60"
+                    )}
+                  />
+                ) : seated ? (
+                  initials(seated.name)
+                ) : (
+                  seatNo
+                )}
               </button>
               {seated && (
                 <p className="mt-1 max-w-[64px] truncate text-[9px] uppercase tracking-wider text-cream-dim">

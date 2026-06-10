@@ -5,6 +5,7 @@ import { playerStats, sessionTotals } from "@/lib/derive";
 import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader, PnL, StatusBadge } from "@/components/ui";
+import { Avatar } from "@/components/Avatar";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 
 export const dynamic = "force-dynamic";
@@ -17,7 +18,7 @@ export default async function SummaryPage({
   const { id } = await params;
   const bundle = await getSessionBundle(id);
   if (!bundle) notFound();
-  const { session, players, txs } = bundle;
+  const { session, players, txs, avatars } = bundle;
 
   const ranked = players
     .map((p) => ({ player: p, stats: playerStats(session, p, txs) }))
@@ -78,6 +79,11 @@ export default async function SummaryPage({
               >
                 {i + 1}
               </span>
+              <Avatar
+                name={player.name}
+                url={avatars[player.id]}
+                className="h-10 w-10 text-sm shrink-0"
+              />
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-cream">
                   {player.name}

@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { setMyChipCount } from "@/lib/actions";
-import { Card, CardHeader } from "@/components/ui";
+import { Collapsible } from "@/components/Collapsible";
 import { ChipCounter } from "@/components/ChipCounter";
 
 export function MyChipCount({ sessionId }: { sessionId: string }) {
@@ -24,15 +24,15 @@ export function MyChipCount({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <Card className="mt-6">
-      <CardHeader
-        title="Count Your Chips"
-        subtitle="Stack them by colour and update your total"
-      />
+    <Collapsible
+      title="Count Your Chips"
+      subtitle="Stack them by colour and update your total"
+      className="mt-6"
+    >
       <div className="px-5 py-4">
         <ChipCounter compact submitLabel={saved ? "Saved" : "Update my chips"} pending={pending} onSubmit={submit} />
         {error && <p className="mt-2 text-xs text-loss">{error}</p>}
       </div>
-    </Card>
+    </Collapsible>
   );
 }

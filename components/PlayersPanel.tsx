@@ -8,6 +8,7 @@ import { Player } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { Button, Input, PnL, StatusBadge } from "@/components/ui";
 import { ChipCounter } from "@/components/ChipCounter";
+import { Avatar } from "@/components/Avatar";
 
 interface Row {
   player: Player;
@@ -22,11 +23,12 @@ interface Props {
   defaultBuyIn: number;
   rows: Row[];
   sessionEnded: boolean;
+  avatars: Record<string, string>;
 }
 
 type Panel = "buyin" | "count" | "cashout" | null;
 
-export function PlayersPanel({ sessionId, currency, chipRatio, defaultBuyIn, rows, sessionEnded }: Props) {
+export function PlayersPanel({ sessionId, currency, chipRatio, defaultBuyIn, rows, sessionEnded, avatars }: Props) {
   const [open, setOpen] = useState<{ playerId: string; panel: Panel } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
@@ -67,7 +69,6 @@ export function PlayersPanel({ sessionId, currency, chipRatio, defaultBuyIn, row
       <table className="w-full text-sm">
         <thead>
           <tr className="border-b hairline text-[10px] uppercase tracking-[0.18em] text-cream-dim">
-            <th className="px-3 py-3 text-left w-12">Seat</th>
             <th className="px-3 py-3 text-left">Player</th>
             <th className="px-3 py-3 text-right">Buy-ins</th>
             <th className="px-3 py-3 text-right">Chips</th>
@@ -84,6 +85,7 @@ export function PlayersPanel({ sessionId, currency, chipRatio, defaultBuyIn, row
               <PlayerRow
                 key={player.id}
                 player={player}
+                avatarUrl={avatars[player.id]}
                 stats={stats}
                 currency={currency}
                 chipRatio={chipRatio}
@@ -112,6 +114,7 @@ export function PlayersPanel({ sessionId, currency, chipRatio, defaultBuyIn, row
 
 function PlayerRow({
   player,
+  avatarUrl,
   stats,
   currency,
   chipRatio,
@@ -127,6 +130,7 @@ function PlayerRow({
   onRemove,
 }: {
   player: Player;
+  avatarUrl?: string;
   stats: PlayerStats;
   currency: string;
   chipRatio: number;
@@ -149,18 +153,12 @@ function PlayerRow({
   return (
     <>
       <tr className={cn("border-b hairline/50 border-white/5", cashedOut && "opacity-50")}>
-        <td className="px-3 py-3 text-center">
-          <span className={cn("tabular-nums", player.seat ? "text-brass" : "text-cream-faint")}>
-            {player.seat ?? "\u2014"}
-          </span>
-        </td>
         <td className="px-3 py-3">
-          <span className="font-medium text-cream">{player.name}</span>
-          {cashedOut && (
-            <span className="ml-2 align-middle">
-              <StatusBadge status="cashed_out" />
-            </span>
-          )}
+          <div className="flex items-center gap-2.5">
+            <Avatar name={player.name} url={avatarUrl} className="h-8 w-8 text-[11px] shrink-0" />
+            <span className="font-medium text-cream">{player.name}</span>
+            {cashedOut && <StatusBadge status="cashed_out" />}
+          </div>
         </td>
         <td className="px-3 py-3 text-right tabular-nums">
           <span className="text-cream">{formatCash(stats.buyInCash, currency)}</span>
@@ -203,7 +201,7 @@ function PlayerRow({
 
       {openPanel && (
         <tr className="border-b hairline/50 border-white/5 bg-felt-deep/40">
-          <td colSpan={7} className="px-5 py-4">
+          <td colSpan={6} className="px-5 py-4">
             {openPanel === "buyin" && (
               <div className="flex flex-wrap items-end gap-3">
                 <div>

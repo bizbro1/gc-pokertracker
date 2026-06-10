@@ -359,6 +359,52 @@ export async function setChipCount(
   }
 }
 
+async function playerIdFromCookie(sessionId: string): Promise<string | null> {
+  const jar = await cookies();
+  const playerKey = jar.get(playerCookieName(sessionId))?.value;
+  if (!playerKey) return null;
+  const { data } = await supabaseAdmin()
+    .from("player_keys")
+    .select("player_id")
+    .eq("player_key", playerKey)
+    .single();
+  return data?.player_id ?? null;
+}
+
+/** Player uploads their own profile picture from their phone. */
+export async function uploadAvatar(sessionId: string, formData: FormData): Promise<ActionResult> {
+  try {
+    const playerId = await playerIdFromCookie(sessionId);
+    if (!playerId) return { ok: false, error: "You are not seated at this table" };
+
+    const db = supabaseAdmin();
+    const { data: player } = await db
+      .from("players")
+      .select("id, session_id")
+      .eq("id", playerId)
+      .single();
+    if (!player || player.session_id !== sessionId)
+      return { ok: false, error: "You are not seated at this table" };
+
+    const file = formData.get("file");
+    if (!(file instanceof File) || file.size === 0)
+      return { ok: false, error: "No image received" };
+    if (file.size > 4 * 1024 * 1024)
+      return { ok: false, error: "Image is too large (max 4 MB)" };
+
+    const bytes = await file.arrayBuffer();
+    const { error } = await db.storage
+      .from("avatars")
+      .upload(`${playerId}.jpg`, bytes, { contentType: "image/jpeg", upsert: true });
+    if (error) throw new Error(error.message);
+
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
 /** Player counts their own stack from their phone. Only affects their own row. */
 export async function setMyChipCount(
   sessionId: string,

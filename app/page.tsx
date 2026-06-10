@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { listSessions } from "@/lib/queries";
+import { listSessions, SessionListItem } from "@/lib/queries";
 import { formatCash } from "@/lib/format";
 import { Card, StatusBadge } from "@/components/ui";
 
@@ -18,11 +18,43 @@ function SuitDivider() {
   );
 }
 
+function SessionCard({ session, href }: { session: SessionListItem; href: string }) {
+  return (
+    <Link href={href} className="block group">
+      <Card className="flex items-center justify-between gap-4 px-5 py-4 transition group-hover:border-brass/50">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <span className="font-display text-xl text-cream truncate">{session.name}</span>
+            <StatusBadge status={session.status} />
+          </div>
+          <p className="mt-1 text-xs text-cream-dim tabular-nums">
+            {new Date(session.created_at).toLocaleDateString("en-GB", {
+              day: "numeric",
+              month: "short",
+              year: "numeric",
+            })}
+            {" · "}
+            {session.players?.[0]?.count ?? 0} players
+            {" · "}
+            blinds {session.small_blind}/{session.big_blind}
+            {" · "}
+            buy-in {formatCash(session.default_buy_in_cash, session.currency_code)}
+          </p>
+        </div>
+        <span className="text-brass-dim transition group-hover:text-brass">&rarr;</span>
+      </Card>
+    </Link>
+  );
+}
+
 export default async function HomePage() {
-  let sessions: Awaited<ReturnType<typeof listSessions>> = [];
+  let open: SessionListItem[] = [];
+  let closed: SessionListItem[] = [];
   let dbError: string | null = null;
   try {
-    sessions = await listSessions(["setup", "active"]);
+    const all = await listSessions();
+    open = all.filter((s) => s.status !== "ended");
+    closed = all.filter((s) => s.status === "ended");
   } catch (e) {
     dbError = e instanceof Error ? e.message : "Could not reach the database";
   }
@@ -52,64 +84,53 @@ export default async function HomePage() {
         </div>
       </header>
 
-      <section className="mt-16">
-        <h2 className="mb-4 text-[11px] uppercase tracking-[0.3em] text-cream-dim">
-          Open Tables
-        </h2>
+      {dbError ? (
+        <Card className="mt-16 px-5 py-6 text-sm text-loss">
+          Could not reach the database. Has the SQL migration been run in
+          Supabase? <span className="text-cream-faint">({dbError})</span>
+        </Card>
+      ) : (
+        <>
+          <section className="mt-16">
+            <h2 className="mb-4 text-[11px] uppercase tracking-[0.3em] text-cream-dim">
+              Open Tables
+            </h2>
+            {open.length === 0 ? (
+              <Card className="px-5 py-10 text-center">
+                <p className="font-display text-2xl text-brass-dim">
+                  No open tables tonight.
+                </p>
+                <p className="mt-2 text-sm text-cream-dim">
+                  Open a new table to deal the first hand.
+                </p>
+              </Card>
+            ) : (
+              <ul className="space-y-3">
+                {open.map((s) => (
+                  <li key={s.id}>
+                    <SessionCard session={s} href={`/session/${s.id}`} />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
 
-        {dbError ? (
-          <Card className="px-5 py-6 text-sm text-loss">
-            Could not reach the database. Has the SQL migration been run in
-            Supabase? <span className="text-cream-faint">({dbError})</span>
-          </Card>
-        ) : sessions.length === 0 ? (
-          <Card className="px-5 py-10 text-center">
-            <p className="font-display text-2xl text-brass-dim">No open tables tonight.</p>
-            <p className="mt-2 text-sm text-cream-dim">
-              Open a new table, or browse past nights in{" "}
-              <Link href="/history" className="text-brass hover:text-brass-bright">
-                History
-              </Link>
-              .
-            </p>
-          </Card>
-        ) : (
-          <ul className="space-y-3">
-            {sessions.map((s) => (
-              <li key={s.id}>
-                <Link href={`/session/${s.id}`} className="block group">
-                  <Card className="flex items-center justify-between gap-4 px-5 py-4 transition group-hover:border-brass/50">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-3">
-                        <span className="font-display text-xl text-cream truncate">
-                          {s.name}
-                        </span>
-                        <StatusBadge status={s.status} />
-                      </div>
-                      <p className="mt-1 text-xs text-cream-dim tabular-nums">
-                        {new Date(s.created_at).toLocaleDateString("en-GB", {
-                          day: "numeric",
-                          month: "short",
-                          year: "numeric",
-                        })}
-                        {" · "}
-                        {s.players?.[0]?.count ?? 0} players
-                        {" · "}
-                        blinds {s.small_blind}/{s.big_blind}
-                        {" · "}
-                        buy-in {formatCash(s.default_buy_in_cash, s.currency_code)}
-                      </p>
-                    </div>
-                    <span className="text-brass-dim transition group-hover:text-brass">
-                      &rarr;
-                    </span>
-                  </Card>
-                </Link>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
+          {closed.length > 0 && (
+            <section className="mt-12">
+              <h2 className="mb-4 text-[11px] uppercase tracking-[0.3em] text-cream-dim">
+                Closed Tables
+              </h2>
+              <ul className="space-y-3">
+                {closed.map((s) => (
+                  <li key={s.id}>
+                    <SessionCard session={s} href={`/session/${s.id}/summary`} />
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+        </>
+      )}
     </main>
   );
 }
