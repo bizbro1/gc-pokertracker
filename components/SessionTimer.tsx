@@ -1,34 +1,64 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import {
+  blindElapsedMs,
+  isBlindPaused,
+  levelAt,
+  nextLevel,
+  planOf,
+} from "@/lib/blindSchedule";
+import { formatChips } from "@/lib/format";
+import { Session } from "@/lib/types";
 
-function elapsed(startedAt: string): string {
-  const ms = Date.now() - new Date(startedAt).getTime();
-  if (ms < 0) return "0:00";
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
+function clock(totalSec: number): string {
+  const s = Math.max(0, totalSec);
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
   return h > 0
-    ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`
-    : `${m}:${String(s).padStart(2, "0")}`;
+    ? `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`
+    : `${m}:${String(sec).padStart(2, "0")}`;
 }
 
-export function SessionTimer({ startedAt }: { startedAt: string }) {
-  const [text, setText] = useState<string>("");
+/**
+ * Player-view timer. With a blind schedule it shows the current level
+ * (e.g. "Level 1/9 · 25/50") counting down to the next blind increase;
+ * without one it shows time elapsed at the table.
+ */
+export function SessionTimer({ session }: { session: Session }) {
+  const plan = planOf(session);
+  const paused = isBlindPaused(session);
+  const [now, setNow] = useState<number | null>(null);
 
   useEffect(() => {
-    setText(elapsed(startedAt));
-    const t = setInterval(() => setText(elapsed(startedAt)), 1000);
+    setNow(Date.now());
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [startedAt]);
+  }, []);
+
+  let label = "At the table";
+  let value = "—";
+
+  if (now !== null && session.started_at) {
+    const elapsedSec = Math.floor((now - new Date(session.started_at).getTime()) / 1000);
+    value = clock(elapsedSec);
+
+    if (plan) {
+      const blindSec = Math.floor(blindElapsedMs(session, now) / 1000);
+      const current = levelAt(plan, blindSec / 60);
+      if (current) {
+        const next = nextLevel(plan, current);
+        label = `Level ${current.level}/${plan.levels.length} · ${formatChips(current.smallBlind)}/${formatChips(current.bigBlind)}`;
+        value = paused ? "Paused" : next ? clock(next.startsAtMin * 60 - blindSec) : "Final level";
+      }
+    }
+  }
 
   return (
     <div className="text-right">
-      <p className="text-[10px] uppercase tracking-[0.2em] text-cream-dim">At the table</p>
-      <p className="font-display text-2xl text-brass tabular-nums leading-none mt-0.5">
-        {text || "\u2014"}
-      </p>
+      <p className="text-[10px] uppercase tracking-[0.2em] text-cream-dim">{label}</p>
+      <p className="font-display text-2xl text-brass tabular-nums leading-none mt-0.5">{value}</p>
     </div>
   );
 }

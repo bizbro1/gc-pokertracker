@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getSessionBundle } from "@/lib/queries";
 import { playerStats, sessionTotals } from "@/lib/derive";
 import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
+import { settle } from "@/lib/settle";
 import { cn } from "@/lib/cn";
 import { Card, CardHeader, PnL, StatusBadge } from "@/components/ui";
 import { Avatar } from "@/components/Avatar";
@@ -25,6 +26,10 @@ export default async function SummaryPage({
     .sort((a, b) => b.stats.pnl - a.stats.pnl);
 
   const totals = sessionTotals(session, players, txs);
+  const byId = new Map(players.map((p) => [p.id, p]));
+  const transfers = settle(
+    ranked.map(({ player, stats }) => ({ id: player.id, amount: stats.pnl }))
+  );
   const duration =
     session.started_at && session.ended_at
       ? Math.round(
@@ -114,6 +119,43 @@ export default async function SummaryPage({
             </li>
           )}
         </ol>
+      </Card>
+
+      <Card className="mt-6">
+        <CardHeader
+          title="The Settlement"
+          subtitle={
+            transfers.length === 0
+              ? "All square — nobody owes anybody"
+              : `${transfers.length} payment${transfers.length === 1 ? "" : "s"} squares the night`
+          }
+        />
+        {transfers.length > 0 && (
+          <ol>
+            {transfers.map((t, i) => {
+              const from = byId.get(t.fromId);
+              const to = byId.get(t.toId);
+              if (!from || !to) return null;
+              return (
+                <li
+                  key={i}
+                  className="flex items-center gap-4 border-b border-white/5 px-5 py-4 last:border-0"
+                >
+                  <Avatar name={from.name} url={avatars[from.id]} className="h-9 w-9 text-xs shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-cream">
+                    <span className="font-medium">{from.name}</span>
+                    <span className="mx-2 text-brass">&rarr;</span>
+                    <span className="font-medium">{to.name}</span>
+                  </span>
+                  <Avatar name={to.name} url={avatars[to.id]} className="h-9 w-9 text-xs shrink-0" />
+                  <span className="w-28 text-right font-display text-xl tabular-nums text-brass-bright">
+                    {formatCash(t.amount, session.currency_code)}
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        )}
       </Card>
 
       <Card className="mt-6 grid grid-cols-3 divide-x divide-white/5 text-center">

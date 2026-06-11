@@ -55,7 +55,7 @@ export default async function PlayerView({
 
       {session.status === "active" && session.started_at && (
         <div className="mt-4 flex justify-center">
-          <SessionTimer startedAt={session.started_at} />
+          <SessionTimer session={session} />
         </div>
       )}
 

@@ -4,6 +4,8 @@ import { useState } from "react";
 import { useFormStatus } from "react-dom";
 import { createSession } from "@/lib/actions";
 import { formatCash, formatChips, formatNumber } from "@/lib/format";
+import { BlindPlan } from "@/lib/types";
+import { BlindCalculator } from "@/components/BlindCalculator";
 import { Button, Card, CardHeader, Input, Label, Textarea } from "@/components/ui";
 
 function SubmitButton() {
@@ -20,9 +22,18 @@ export function NewSessionForm() {
   const [cashRate, setCashRate] = useState(1000);
   const [chipRate, setChipRate] = useState(20000);
   const [buyIn, setBuyIn] = useState(1000);
+  const [smallBlind, setSmallBlind] = useState(100);
+  const [bigBlind, setBigBlind] = useState(200);
+  const [schedule, setSchedule] = useState<BlindPlan | null>(null);
 
   const ratio = cashRate > 0 ? chipRate / cashRate : 0;
   const buyInChips = Math.round(buyIn * ratio);
+
+  function applyStructure(sb: number, bb: number, plan: BlindPlan) {
+    setSmallBlind(sb);
+    setBigBlind(bb);
+    setSchedule(plan);
+  }
 
   return (
     <form action={createSession} className="space-y-6">
@@ -113,11 +124,25 @@ export function NewSessionForm() {
             </div>
             <div>
               <Label htmlFor="small_blind">Small blind</Label>
-              <Input id="small_blind" name="small_blind" type="number" min={0} defaultValue={100} />
+              <Input
+                id="small_blind"
+                name="small_blind"
+                type="number"
+                min={0}
+                value={smallBlind}
+                onChange={(e) => setSmallBlind(Number(e.target.value) || 0)}
+              />
             </div>
             <div>
               <Label htmlFor="big_blind">Big blind</Label>
-              <Input id="big_blind" name="big_blind" type="number" min={0} defaultValue={200} />
+              <Input
+                id="big_blind"
+                name="big_blind"
+                type="number"
+                min={0}
+                value={bigBlind}
+                onChange={(e) => setBigBlind(Number(e.target.value) || 0)}
+              />
             </div>
           </div>
 
@@ -126,6 +151,11 @@ export function NewSessionForm() {
             <span className="text-brass">{formatChips(buyInChips)} chips</span> for{" "}
             {formatCash(buyIn || 0, currency || "NOK")}. Blinds are in chips.
           </p>
+
+          <BlindCalculator stackChips={buyInChips} onApply={applyStructure} />
+          {schedule && (
+            <input type="hidden" name="blind_schedule" value={JSON.stringify(schedule)} />
+          )}
         </div>
       </Card>
 

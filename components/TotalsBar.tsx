@@ -2,6 +2,8 @@ import { SessionTotals } from "@/lib/derive";
 import { formatCash, formatChips } from "@/lib/format";
 import { cn } from "@/lib/cn";
 import { Card } from "@/components/ui";
+import { LevelStats } from "@/components/LevelStats";
+import { Session } from "@/lib/types";
 
 function Stat({ label, value, tone }: { label: string; value: string; tone?: string }) {
   return (
@@ -16,26 +18,23 @@ function Stat({ label, value, tone }: { label: string; value: string; tone?: str
 
 export function TotalsBar({
   totals,
-  currency,
+  session,
   className,
 }: {
   totals: SessionTotals;
-  currency: string;
+  session: Session;
   className?: string;
 }) {
-  const balanced = Math.abs(totals.discrepancy) < 0.01;
   return (
-    <Card className={cn("grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 divide-x divide-white/5", className)}>
-      <Stat label="Cash in" value={formatCash(totals.cashIn, currency)} />
-      <Stat label="Chips issued" value={formatChips(totals.chipsIssued)} />
+    <Card
+      className={cn(
+        "grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-white/5",
+        className
+      )}
+    >
+      <Stat label="Cash in" value={formatCash(totals.cashIn, session.currency_code)} />
       <Stat label="Chips in play" value={formatChips(totals.chipsInPlay)} />
-      <Stat label="Chips returned" value={formatChips(totals.chipsReturned)} />
-      <Stat label="Cash paid out" value={formatCash(totals.cashOut, currency)} />
-      <Stat
-        label="Bank check"
-        value={balanced ? "Balanced" : formatCash(totals.discrepancy, currency)}
-        tone={balanced ? "text-win" : "text-loss"}
-      />
+      <LevelStats session={session} />
     </Card>
   );
 }

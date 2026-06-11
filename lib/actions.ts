@@ -6,8 +6,9 @@ import { revalidatePath } from "next/cache";
 import { supabaseAdmin } from "./supabase/admin";
 import { generateJoinCode, generateSecretKey } from "./keys";
 import { cashToChips, chipsToCash } from "./derive";
+import { structureAsText } from "./blinds";
 import { hostCookieName, playerCookieName } from "./cookie-names";
-import { Session } from "./types";
+import { BlindPlan, Session } from "./types";
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -67,24 +68,51 @@ export async function createSession(formData: FormData): Promise<void> {
   const big_blind = Number(formData.get("big_blind")) || 0;
   const notes = String(formData.get("notes") ?? "").trim();
 
+  let blind_schedule: BlindPlan | null = null;
+  try {
+    const raw = String(formData.get("blind_schedule") ?? "");
+    if (raw) {
+      const parsed = JSON.parse(raw) as BlindPlan;
+      if (Array.isArray(parsed.levels) && parsed.levels.length > 0) blind_schedule = parsed;
+    }
+  } catch {
+    /* a broken schedule never blocks session creation */
+  }
+
   const join_code = generateJoinCode();
   const host_key = generateSecretKey();
 
-  const { data: session, error } = await db
+  const row = {
+    name,
+    currency_code,
+    cash_per_rate,
+    chips_per_rate,
+    default_buy_in_cash,
+    small_blind,
+    big_blind,
+    notes,
+    join_code,
+  };
+
+  const insertRow: Record<string, unknown> = { ...row };
+  if (blind_schedule) insertRow.blind_schedule = blind_schedule;
+
+  let { data: session, error } = await db
     .from("sessions")
-    .insert({
-      name,
-      currency_code,
-      cash_per_rate,
-      chips_per_rate,
-      default_buy_in_cash,
-      small_blind,
-      big_blind,
-      notes,
-      join_code,
-    })
+    .insert(insertRow)
     .select("id")
     .single();
+
+  // Migration 0002 not run yet — fall back to the legacy notes format so the
+  // schedule still reaches the TV clock
+  if (error && blind_schedule && /blind_schedule/i.test(error.message)) {
+    const text = structureAsText(blind_schedule.levels, blind_schedule.levelMin);
+    ({ data: session, error } = await db
+      .from("sessions")
+      .insert({ ...row, notes: notes ? `${notes}\n\n${text}` : text })
+      .select("id")
+      .single());
+  }
   if (error || !session) throw new Error(error?.message ?? "Could not create session");
 
   const { error: keyError } = await db
@@ -238,30 +266,39 @@ export async function removePlayer(sessionId: string, playerId: string): Promise
   }
 }
 
-export async function assignSeat(
-  sessionId: string,
-  playerId: string,
-  seat: number | null
-): Promise<ActionResult> {
+// ---------------------------------------------------------------------------
+// Blind clock
+// ---------------------------------------------------------------------------
+
+export async function pauseBlindClock(sessionId: string): Promise<ActionResult> {
   try {
     await requireHost(sessionId);
-    const db = supabaseAdmin();
+    const { error } = await supabaseAdmin()
+      .from("sessions")
+      .update({ blind_paused_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .eq("status", "active")
+      .is("blind_paused_at", null);
+    if (error) throw new Error(error.message);
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
 
-    if (seat !== null) {
-      // Free the seat first if someone else is sitting there
-      await db
-        .from("players")
-        .update({ seat: null })
-        .eq("session_id", sessionId)
-        .eq("seat", seat)
-        .neq("id", playerId);
-    }
-
-    const { error } = await db
-      .from("players")
-      .update({ seat })
-      .eq("id", playerId)
-      .eq("session_id", sessionId);
+export async function resumeBlindClock(sessionId: string): Promise<ActionResult> {
+  try {
+    await requireHost(sessionId);
+    const session = await getSession(sessionId);
+    if (!session.blind_paused_at) return { ok: true };
+    const pausedMs =
+      (session.blind_paused_ms ?? 0) +
+      Math.max(0, Date.now() - new Date(session.blind_paused_at).getTime());
+    const { error } = await supabaseAdmin()
+      .from("sessions")
+      .update({ blind_paused_at: null, blind_paused_ms: Math.round(pausedMs) })
+      .eq("id", sessionId);
     if (error) throw new Error(error.message);
     refresh(sessionId);
     return { ok: true };
@@ -273,6 +310,38 @@ export async function assignSeat(
 // ---------------------------------------------------------------------------
 // Money
 // ---------------------------------------------------------------------------
+
+/** Undo a mistaken entry. Removing a cash-out puts the player back in the game. */
+export async function deleteTransaction(sessionId: string, txId: string): Promise<ActionResult> {
+  try {
+    await requireHost(sessionId);
+    const db = supabaseAdmin();
+    const { data: tx, error: txError } = await db
+      .from("transactions")
+      .select("*")
+      .eq("id", txId)
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (txError) throw new Error(txError.message);
+    if (!tx) return { ok: false, error: "Entry not found" };
+
+    const { error } = await db.from("transactions").delete().eq("id", txId);
+    if (error) throw new Error(error.message);
+
+    if (tx.type === "cash_out") {
+      await db
+        .from("players")
+        .update({ status: "active" })
+        .eq("id", tx.player_id)
+        .eq("status", "cashed_out");
+    }
+
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
 
 export async function addBuyIn(
   sessionId: string,

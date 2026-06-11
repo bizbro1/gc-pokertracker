@@ -2,6 +2,19 @@ export type SessionStatus = "setup" | "active" | "ended";
 export type PlayerStatus = "active" | "cashed_out";
 export type TxType = "buy_in" | "cash_out" | "adjustment";
 
+export interface BlindLevel {
+  level: number;
+  smallBlind: number;
+  bigBlind: number;
+  /** minutes from the start of the game */
+  startsAtMin: number;
+}
+
+export interface BlindPlan {
+  levelMin: number;
+  levels: BlindLevel[];
+}
+
 export interface Session {
   id: string;
   name: string;
@@ -17,6 +30,10 @@ export interface Session {
   started_at: string | null;
   ended_at: string | null;
   created_at: string;
+  /** null before migration 0002 or when no schedule was set */
+  blind_schedule?: BlindPlan | null;
+  blind_paused_at?: string | null;
+  blind_paused_ms?: number;
 }
 
 export interface Player {

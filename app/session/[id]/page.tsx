@@ -5,15 +5,16 @@ import { getSessionBundle, getPlayerIdByKey, isHost } from "@/lib/queries";
 import { hostCookieName, playerCookieName } from "@/lib/cookie-names";
 import { playerStats, sessionTotals, chipsPerCash } from "@/lib/derive";
 import { formatCash, formatChips } from "@/lib/format";
+import { cn } from "@/lib/cn";
 import { Card, CardHeader, StatusBadge } from "@/components/ui";
 import { StatusControls } from "@/components/StatusControls";
-import { SessionTimer } from "@/components/SessionTimer";
-import { InvitePanel } from "@/components/InvitePanel";
 import { PlayersPanel } from "@/components/PlayersPanel";
+import { QrButton } from "@/components/QrButton";
 import { AddPlayerForm } from "@/components/AddPlayerForm";
-import { SeatMap } from "@/components/SeatMap";
+import { ActivityLog } from "@/components/ActivityLog";
 import { TotalsBar } from "@/components/TotalsBar";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
+import { TvModeButton } from "@/components/tv/TvModeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -38,6 +39,7 @@ export default async function SessionDashboard({
 
   const rows = players.map((p) => ({ player: p, stats: playerStats(session, p, txs) }));
   const totals = sessionTotals(session, players, txs);
+  const balanced = Math.abs(totals.discrepancy) < 0.01;
 
   return (
     <main className="mx-auto max-w-7xl px-5 py-8">
@@ -55,6 +57,22 @@ export default async function SessionDashboard({
           <div className="mt-2 flex items-center gap-4">
             <h1 className="font-display text-4xl brass-text">{session.name}</h1>
             <StatusBadge status={session.status} />
+            <span
+              className={cn(
+                "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[10px] uppercase tracking-[0.15em]",
+                balanced ? "border-win/50 text-win" : "border-loss/50 text-loss"
+              )}
+            >
+              <span
+                className={cn(
+                  "h-1.5 w-1.5 rounded-full",
+                  balanced ? "bg-win" : "bg-loss animate-pulse"
+                )}
+              />
+              {balanced
+                ? "Bank balanced"
+                : `Bank ${formatCash(totals.discrepancy, session.currency_code)}`}
+            </span>
           </div>
           <p className="mt-1 text-xs text-cream-dim tabular-nums">
             Blinds {formatChips(session.small_blind)}/{formatChips(session.big_blind)}
@@ -66,14 +84,13 @@ export default async function SessionDashboard({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {session.status === "active" && session.started_at && (
-            <SessionTimer startedAt={session.started_at} />
-          )}
+          {session.status !== "ended" && <QrButton joinCode={session.join_code} />}
+          <TvModeButton session={session} players={players} txs={txs} avatars={avatars} />
           <StatusControls sessionId={id} status={session.status} />
         </div>
       </div>
 
-      <TotalsBar totals={totals} currency={session.currency_code} className="mt-6" />
+      <TotalsBar totals={totals} session={session} className="mt-6" />
 
       <div className="mt-6 grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Players */}
@@ -107,25 +124,7 @@ export default async function SessionDashboard({
 
         {/* Side column */}
         <div className="space-y-6">
-          <InvitePanel joinCode={session.join_code} disabled={session.status === "ended"} />
-          <Card>
-            <CardHeader title="Seating" subtitle="Tap a seat to assign a player" />
-            <div className="px-4 py-5">
-              <SeatMap
-                sessionId={id}
-                players={players}
-                interactive={session.status !== "ended"}
-                avatars={avatars}
-              />
-            </div>
-          </Card>
-          <Link
-            href={`/session/${id}/tv`}
-            target="_blank"
-            className="block rounded-xl border hairline bg-gradient-to-b from-espresso to-coal px-5 py-4 text-center font-display text-xl text-brass hover:border-brass transition"
-          >
-            TV mode &rarr;
-          </Link>
+          <ActivityLog session={session} players={players} txs={txs} />
           {session.status === "ended" && (
             <Link
               href={`/session/${id}/summary`}
