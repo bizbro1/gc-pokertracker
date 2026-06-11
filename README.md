@@ -9,6 +9,7 @@ A private poker session tracker for the Gentleman's Club. The host runs the tabl
 - **Phone join** — players scan a QR code, enter their name, and follow the game live; they cannot touch game state
 - **Live everywhere** — Supabase Realtime keeps the host, every phone, and the summary in sync
 - **Final standings** — ranked P/L when the night is over
+- **TV mode** — `/session/[id]/tv`: a chrome-free big-screen view with the clock, blinds, live stack rankings and a scannable join QR
 
 ## Stack
 
@@ -60,6 +61,4 @@ Open http://localhost:3000. To let phones join while developing, run `npm run de
 
 ## Roadmap
 
-- **TV mode** — `/session/[id]/tv`: a clean big-screen view of stacks, blinds and the clock, reading the same Realtime data
 - Host accounts via Supabase Auth
-- Session history and player statistics across nights

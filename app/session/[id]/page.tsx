@@ -119,6 +119,13 @@ export default async function SessionDashboard({
               />
             </div>
           </Card>
+          <Link
+            href={`/session/${id}/tv`}
+            target="_blank"
+            className="block rounded-xl border hairline bg-gradient-to-b from-espresso to-coal px-5 py-4 text-center font-display text-xl text-brass hover:border-brass transition"
+          >
+            TV mode &rarr;
+          </Link>
           {session.status === "ended" && (
             <Link
               href={`/session/${id}/summary`}

@@ -13,6 +13,9 @@ const LINKS = [
 export function NavBar() {
   const pathname = usePathname();
 
+  // TV mode is a clean big-screen view — no chrome
+  if (pathname.endsWith("/tv")) return null;
+
   return (
     <nav className="sticky top-0 z-50 border-b hairline bg-ink/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-5">
