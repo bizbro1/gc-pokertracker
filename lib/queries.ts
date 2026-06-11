@@ -96,6 +96,16 @@ export async function isHost(sessionId: string, cookieKey: string | undefined): 
   return !!data && data.host_key === cookieKey;
 }
 
+/** The short host-recovery code (null on sessions created before migration 0003). */
+export async function getHostCode(sessionId: string): Promise<string | null> {
+  const { data } = await supabaseAdmin()
+    .from("session_keys")
+    .select("host_code")
+    .eq("session_id", sessionId)
+    .maybeSingle();
+  return data?.host_code ?? null;
+}
+
 export async function getPlayerIdByKey(playerKey: string | undefined): Promise<string | null> {
   if (!playerKey) return null;
   const { data } = await supabaseAdmin()

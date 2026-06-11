@@ -5,7 +5,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { Button } from "@/components/ui";
 
 /** Header button that pops the join QR code up in a modal. */
-export function QrButton({ joinCode }: { joinCode: string }) {
+export function QrButton({ joinCode, hostCode }: { joinCode: string; hostCode?: string | null }) {
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState("");
   const [copied, setCopied] = useState(false);
@@ -61,6 +61,13 @@ export function QrButton({ joinCode }: { joinCode: string }) {
                 Close
               </Button>
             </div>
+            {hostCode && (
+              <p className="text-center text-[10px] uppercase tracking-[0.2em] text-cream-faint">
+                Host code <span className="text-brass tracking-[0.3em]">{hostCode}</span>
+                <br />
+                run the table from another device via the join page
+              </p>
+            )}
           </div>
         </div>
       )}

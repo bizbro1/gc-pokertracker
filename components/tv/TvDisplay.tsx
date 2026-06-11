@@ -9,6 +9,7 @@ import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
 import { Player, Session, Tx } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { PnL, StatusBadge } from "@/components/ui";
+import { playEventSound } from "./sounds";
 import {
   buildLeaderboard,
   TvActivity,
@@ -206,15 +207,23 @@ export function TvDisplay({
       );
     });
 
-    if (!mutedRef.current && "speechSynthesis" in window) {
-      try {
-        for (const e of fresh) {
-          const u = new SpeechSynthesisUtterance(e.text);
-          u.rate = 0.95;
-          window.speechSynthesis.speak(u);
+    if (!mutedRef.current) {
+      // Sound effect first (staggered when several land at once), voice after
+      fresh.slice(0, 3).forEach((e, i) => {
+        setTimeout(() => {
+          if (!mutedRef.current) playEventSound(e.kind);
+        }, i * 700);
+      });
+      if ("speechSynthesis" in window) {
+        try {
+          for (const e of fresh) {
+            const u = new SpeechSynthesisUtterance(e.text);
+            u.rate = 0.95;
+            window.speechSynthesis.speak(u);
+          }
+        } catch {
+          /* speech unavailable */
         }
-      } catch {
-        /* speech unavailable */
       }
     }
   }, [events]);

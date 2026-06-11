@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { cookies } from "next/headers";
 import { notFound, redirect } from "next/navigation";
-import { getSessionBundle, getPlayerIdByKey, isHost } from "@/lib/queries";
+import { getSessionBundle, getPlayerIdByKey, getHostCode, isHost } from "@/lib/queries";
 import { hostCookieName, playerCookieName } from "@/lib/cookie-names";
 import { playerStats, sessionTotals, chipsPerCash } from "@/lib/derive";
 import { formatCash, formatChips } from "@/lib/format";
@@ -40,6 +40,7 @@ export default async function SessionDashboard({
   const rows = players.map((p) => ({ player: p, stats: playerStats(session, p, txs) }));
   const totals = sessionTotals(session, players, txs);
   const balanced = Math.abs(totals.discrepancy) < 0.01;
+  const hostCode = await getHostCode(id);
 
   return (
     <main className="mx-auto max-w-7xl px-5 py-8">
@@ -84,7 +85,9 @@ export default async function SessionDashboard({
           </p>
         </div>
         <div className="flex items-center gap-4">
-          {session.status !== "ended" && <QrButton joinCode={session.join_code} />}
+          {session.status !== "ended" && (
+            <QrButton joinCode={session.join_code} hostCode={hostCode} />
+          )}
           <TvModeButton session={session} players={players} txs={txs} avatars={avatars} />
           <StatusControls sessionId={id} status={session.status} />
         </div>

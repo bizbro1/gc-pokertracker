@@ -115,9 +115,16 @@ export async function createSession(formData: FormData): Promise<void> {
   }
   if (error || !session) throw new Error(error?.message ?? "Could not create session");
 
-  const { error: keyError } = await db
+  const host_code = generateJoinCode();
+  let { error: keyError } = await db
     .from("session_keys")
-    .insert({ session_id: session.id, host_key });
+    .insert({ session_id: session.id, host_key, host_code });
+  // Migration 0003 not run yet — create without a recovery code
+  if (keyError && /host_code/i.test(keyError.message)) {
+    ({ error: keyError } = await db
+      .from("session_keys")
+      .insert({ session_id: session.id, host_key }));
+  }
   if (keyError) {
     await db.from("sessions").delete().eq("id", session.id);
     throw new Error(keyError.message);
@@ -128,6 +135,33 @@ export async function createSession(formData: FormData): Promise<void> {
 
   revalidatePath("/");
   redirect(`/session/${session.id}`);
+}
+
+/**
+ * Claim host on a new device with the session's host code — the host cookie
+ * lives in one browser, so this is the recovery path when the host switches
+ * devices or loses the cookie.
+ */
+export async function claimHost(sessionId: string, code: string): Promise<ActionResult> {
+  try {
+    const cleaned = code.trim().toUpperCase();
+    if (!cleaned) return { ok: false, error: "Enter the host code" };
+    const { data, error } = await supabaseAdmin()
+      .from("session_keys")
+      .select("host_key, host_code")
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data?.host_code || data.host_code.toUpperCase() !== cleaned)
+      return { ok: false, error: "Wrong host code" };
+
+    const jar = await cookies();
+    jar.set(hostCookieName(sessionId), data.host_key, COOKIE_OPTS);
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
 }
 
 export async function startSession(sessionId: string): Promise<ActionResult> {

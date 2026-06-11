@@ -5,6 +5,7 @@ import { hostCookieName, playerCookieName } from "@/lib/cookie-names";
 import { formatCash, formatChips } from "@/lib/format";
 import { Card, StatusBadge } from "@/components/ui";
 import { JoinForm } from "@/components/JoinForm";
+import { ClaimHostForm } from "@/components/ClaimHostForm";
 
 export const dynamic = "force-dynamic";
 
@@ -50,6 +51,10 @@ export default async function JoinPage({
           <JoinForm joinCode={session.join_code} />
         )}
       </Card>
+
+      <div className="mt-6">
+        <ClaimHostForm sessionId={session.id} />
+      </div>
 
       <p className="mt-6 text-center text-[10px] uppercase tracking-[0.3em] text-cream-faint">
         Gentleman&apos;s Club &mdash; members only
