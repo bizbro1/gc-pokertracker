@@ -91,7 +91,8 @@ export function TvDisplay({
   players: Player[];
   txs: Tx[];
   avatars: Record<string, string>;
-  onExit: () => void;
+  /** present when rendered as an overlay; absent on the standalone /tv route */
+  onExit?: () => void;
 }) {
   const [now, setNow] = useState<number | null>(null);
   const [sceneIdx, setSceneIdx] = useState(0);
@@ -274,9 +275,9 @@ export function TvDisplay({
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={onExit}
+          onClick={onExit ?? handleFullscreen}
           className="group flex cursor-pointer items-center gap-4"
-          aria-label="Exit TV mode"
+          aria-label={onExit ? "Exit TV mode" : "Toggle fullscreen"}
         >
           <span className="flex h-10 w-10 items-center justify-center rounded-full border border-brass-dim/60 font-display text-base text-brass transition group-hover:border-brass">
             GC

@@ -14,7 +14,6 @@ import { AddPlayerForm } from "@/components/AddPlayerForm";
 import { ActivityLog } from "@/components/ActivityLog";
 import { TotalsBar } from "@/components/TotalsBar";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
-import { TvModeButton } from "@/components/tv/TvModeButton";
 
 export const dynamic = "force-dynamic";
 
@@ -88,7 +87,14 @@ export default async function SessionDashboard({
           {session.status !== "ended" && (
             <QrButton joinCode={session.join_code} hostCode={hostCode} />
           )}
-          <TvModeButton session={session} players={players} txs={txs} avatars={avatars} />
+          <a
+            href={`/tv/${session.join_code}`}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-brass-dim/60 px-4 text-sm uppercase tracking-[0.12em] text-brass transition-all duration-150 hover:border-brass hover:bg-brass/5 hover:text-brass-bright"
+          >
+            ⛶ TV mode
+          </a>
           <StatusControls sessionId={id} status={session.status} />
         </div>
       </div>

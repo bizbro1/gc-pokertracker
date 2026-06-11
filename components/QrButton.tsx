@@ -61,6 +61,12 @@ export function QrButton({ joinCode, hostCode }: { joinCode: string; hostCode?: 
                 Close
               </Button>
             </div>
+            <p className="text-center text-[10px] uppercase tracking-[0.2em] text-cream-faint">
+              On the TV&apos;s browser:{" "}
+              <span className="normal-case tracking-normal text-cream-dim">
+                {url ? `${new URL(url).host}/tv/${joinCode}` : `…/tv/${joinCode}`}
+              </span>
+            </p>
             {hostCode && (
               <p className="text-center text-[10px] uppercase tracking-[0.2em] text-cream-faint">
                 Host code <span className="text-brass tracking-[0.3em]">{hostCode}</span>
