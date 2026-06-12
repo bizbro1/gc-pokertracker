@@ -9,6 +9,7 @@ import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
 import { Duel, Player, Session, Tx } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { PnL, StatusBadge } from "@/components/ui";
+import { playLevelUpChime, preloadSounds } from "./sounds";
 import { TvDuel } from "./TvDuel";
 import {
   buildLeaderboard,
@@ -59,28 +60,6 @@ function formatClock(ms: number): string {
   return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
 }
 
-/** Soft two-note chime for blind level changes (no audio files needed). */
-function playLevelUpChime() {
-  try {
-    const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    const ctx = new Ctx();
-    [659.25, 987.77].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.type = "sine";
-      osc.frequency.value = freq;
-      gain.gain.setValueAtTime(0.0001, ctx.currentTime + i * 0.22);
-      gain.gain.exponentialRampToValueAtTime(0.3, ctx.currentTime + i * 0.22 + 0.03);
-      gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + i * 0.22 + 0.8);
-      osc.connect(gain).connect(ctx.destination);
-      osc.start(ctx.currentTime + i * 0.22);
-      osc.stop(ctx.currentTime + i * 0.22 + 0.9);
-    });
-  } catch {
-    /* audio unavailable */
-  }
-}
-
 export function TvDisplay({
   session,
   players,
@@ -111,6 +90,7 @@ export function TvDisplay({
   // Render tick — also gates everything time-dependent off the server render
   useEffect(() => {
     setNow(Date.now());
+    preloadSounds();
     const id = setInterval(() => setNow(Date.now()), 500);
     return () => clearInterval(id);
   }, []);

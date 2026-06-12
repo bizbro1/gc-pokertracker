@@ -7,7 +7,7 @@ import { evaluate7, PlayingCard, rankLabel, RED_SUITS, SUIT_GLYPH } from "@/lib/
 import { formatChips } from "@/lib/format";
 import { Duel, Player } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
-import { playCardFlip, playDuelWin, playEventSound } from "./sounds";
+import { playCardFlip, playDuelSting, playDuelWin } from "./sounds";
 
 /** Seconds into the show when board card i flips — one at a time. */
 const REVEAL_AT = [5, 9, 13, 17, 21];
@@ -105,10 +105,10 @@ export function TvDuel({
     prevStage.current = stage;
     if (muted) return;
     if (first && stage === 0) {
-      playEventSound("duel_challenge");
+      playDuelSting();
       return;
     }
-    playCardFlip(1);
+    playCardFlip();
     if (stage === 5) setTimeout(() => playDuelWin(), 600);
   }, [stage, muted]);
 
