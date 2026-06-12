@@ -83,6 +83,8 @@ export function TvDisplay({
   const [duelShow, setDuelShow] = useState<{ duel: Duel; startedAt: number } | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
+  const duelShowRef = useRef(false);
+  duelShowRef.current = duelShow !== null;
   const seenRef = useRef<Set<string> | null>(null);
   const shownDuelsRef = useRef<Set<string> | null>(null);
   const prevLevelRef = useRef<number | null>(null);
@@ -177,9 +179,15 @@ export function TvDisplay({
     if (level !== null) prevLevelRef.current = level;
   }, [current?.level, plan, active]);
 
-  // Event toasts + voice — announce anything that arrives after first paint.
-  // Duel results are NOT announced here: the runout show reveals the winner
-  // itself, a toast would spoil it.
+  // Duel outcomes must never be announced — the runout reveals the winner
+  // itself. That covers the result event AND every milestone derived from
+  // the duel's chip transfers (doubled up, busted, chip lead, red/black).
+  const duelTxIds = useMemo(
+    () => new Set(txs.filter((t) => t.duel_id).map((t) => t.id)),
+    [txs]
+  );
+
+  // Event toasts — announce anything that arrives after first paint
   useEffect(() => {
     if (seenRef.current === null) {
       seenRef.current = new Set(events.map((e) => e.id));
@@ -190,8 +198,14 @@ export function TvDisplay({
     if (fresh.length === 0) return;
     fresh.forEach((e) => seen.add(e.id));
 
-    const announce = fresh.filter((e) => e.kind !== "duel");
-    if (announce.length === 0) return;
+    const announce = fresh.filter((e) => {
+      if (e.kind === "duel") return false;
+      // Milestone events ride on tx ids ("<txid>", "<txid>-red", "-black", "-leader")
+      const baseId = e.id.replace(/-(red|black|leader)$/, "");
+      return !duelTxIds.has(baseId);
+    });
+    // While a runout is on screen, nothing pops over it
+    if (announce.length === 0 || duelShowRef.current) return;
 
     setToasts((t) => [...t, ...announce].slice(-3));
     announce.forEach((e) => {
@@ -209,7 +223,7 @@ export function TvDisplay({
         }, i * 800);
       });
     }
-  }, [events]);
+  }, [events, duelTxIds]);
 
   // Duel runouts — queue settled duels that arrive while the TV is up and
   // play them one at a time
@@ -232,6 +246,7 @@ export function TvDisplay({
       .sort((a, b) => (a.settled_at ?? "").localeCompare(b.settled_at ?? ""))[0];
     if (next) {
       shown.add(next.id);
+      setToasts([]); // nothing on screen but the runout
       setDuelShow({ duel: next, startedAt: Date.now() });
     }
   }, [duels, duelShow, players]);

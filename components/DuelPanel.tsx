@@ -7,7 +7,8 @@ import { cn } from "@/lib/cn";
 import { formatChips } from "@/lib/format";
 import { Duel, Player } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
-import { Button, Card, CardHeader, Input, Select } from "@/components/ui";
+import { Collapsible } from "@/components/Collapsible";
+import { Button, Input, Select } from "@/components/ui";
 
 /**
  * Poker Duel, from the player's phone: throw down a chip challenge, answer
@@ -80,9 +81,15 @@ export function DuelPanel({
   }
 
   return (
-    <Card className="mt-6 overflow-hidden">
-      <CardHeader title="Poker Duel" subtitle="All-in runout on the big screen" />
-      <div className="px-5 py-4">
+    // Remounts (key) when a challenge or runout appears, so it pops open
+    <Collapsible
+      key={open ? `open-${open.id}` : running ? "running" : "idle"}
+      title="Poker Duel"
+      subtitle="All-in runout on the big screen"
+      defaultOpen={!!open || !!running}
+      className="mt-6"
+    >
+      <div className="border-t hairline px-5 py-4">
         {open ? (
           open.opponent_id === myId ? (
             <div className="text-center">
@@ -207,6 +214,6 @@ export function DuelPanel({
         )}
         {error && <p className="mt-3 text-center text-xs text-loss">{error}</p>}
       </div>
-    </Card>
+    </Collapsible>
   );
 }
