@@ -112,5 +112,34 @@ export function playEventSound(kind: TvEventKind) {
       tone(ac, { freq: 784, at: 0.2, dur: 0.12, type: "square", gain: 0.08 });
       tone(ac, { freq: 1046, at: 0.3, dur: 0.45, type: "square", gain: 0.09 });
       break;
+    case "duel_challenge": // dramatic dun-dun
+      tone(ac, { freq: 110, dur: 0.35, type: "sawtooth", gain: 0.18 });
+      tone(ac, { freq: 110, at: 0.4, dur: 0.6, type: "sawtooth", gain: 0.22 });
+      break;
+    case "duel_declined": // deflating womp
+      tone(ac, { freq: 330, dur: 0.5, type: "sawtooth", gain: 0.1, slideTo: 165 });
+      break;
+    case "duel": // settled — handled by the runout, but keep a clash for the log
+      click(ac, 0, 0.4, 3200);
+      click(ac, 0.08, 0.35, 4000);
+      tone(ac, { freq: 392, at: 0.12, dur: 0.4, type: "triangle", gain: 0.15 });
+      break;
   }
+}
+
+/** Staggered card-flip clicks for the duel runout. */
+export function playCardFlip(count = 1) {
+  const ac = audio();
+  if (!ac) return;
+  for (let i = 0; i < count; i++) click(ac, i * 0.2, 0.32, 2200);
+}
+
+/** The big winner fanfare at the end of a duel. */
+export function playDuelWin() {
+  const ac = audio();
+  if (!ac) return;
+  tone(ac, { freq: 523, dur: 0.5, type: "triangle", gain: 0.14 });
+  tone(ac, { freq: 659, dur: 0.5, type: "triangle", gain: 0.12 });
+  tone(ac, { freq: 784, at: 0.15, dur: 0.5, type: "triangle", gain: 0.15 });
+  tone(ac, { freq: 1046, at: 0.32, dur: 0.9, type: "triangle", gain: 0.18 });
 }

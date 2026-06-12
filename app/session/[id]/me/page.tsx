@@ -12,6 +12,7 @@ import { MyChipCount } from "@/components/MyChipCount";
 import { Avatar } from "@/components/Avatar";
 import { AvatarUploader } from "@/components/AvatarUploader";
 import { Collapsible } from "@/components/Collapsible";
+import { DuelPanel } from "@/components/DuelPanel";
 import { RealtimeRefresher } from "@/components/RealtimeRefresher";
 
 export const dynamic = "force-dynamic";
@@ -24,7 +25,7 @@ export default async function PlayerView({
   const { id } = await params;
   const bundle = await getSessionBundle(id);
   if (!bundle) notFound();
-  const { session, players, txs, avatars } = bundle;
+  const { session, players, txs, duels, avatars } = bundle;
 
   const jar = await cookies();
   const playerId = await getPlayerIdByKey(jar.get(playerCookieName(id))?.value);
@@ -103,6 +104,16 @@ export default async function PlayerView({
 
       {session.status !== "ended" && me.status === "active" && (
         <MyChipCount sessionId={id} />
+      )}
+
+      {session.status === "active" && me.status === "active" && (
+        <DuelPanel
+          sessionId={id}
+          myId={me.id}
+          players={players}
+          duels={duels}
+          avatars={avatars}
+        />
       )}
 
       {/* The table */}

@@ -8,6 +8,7 @@ A private poker session tracker for the Gentleman's Club. The host runs the tabl
 - **Host dashboard** — buy-ins, chip corrections, cash-outs, live P/L per player, bank-check pill, live blind level + countdown with pause/resume, QR invite modal
 - **Table Talk** — a live activity log of everything at the table: joins, buy-ins, rebuys, chip counts, busts, cash-outs, plus derived milestones (doubled up, half a stack, into the red / back in the black, chip-lead changes). Mistaken entries can be undone from the log.
 - **TV mode** — `/tv/<JOINCODE>`: a standalone big-screen page (type it straight into the TV's browser) with a broadcast-style rotation: tournament clock, chip race, stack progression chart, P/L board, stats, activity feed, blind schedule, join QR and hand rankings. Snaps back to the clock before each level change; toasts, sounds + voice announce events. The host keeps running the table from their own device.
+- **Poker Duel** — players challenge each other from their phones for a chip wager; on accept the server deals a full Hold'em runout and the TV plays it like a broadcast: hole cards up, flop → turn → river with live win percentages, winner crowned, chips moved in the books automatically
 - **Showdown** — `/showdown`: a 7-card Texas Hold'em evaluator; deal the board and each player's hole cards to settle who wins the pot
 - **Settlement** — the summary computes the fewest payments that square the night
 - **Phone join** — players scan a QR code, enter their name, and follow the game live; they cannot touch game state. Installable as a PWA (Add to Home Screen).
@@ -40,6 +41,8 @@ Open the Supabase **SQL Editor** and run the migrations in order:
 
 1. [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql) — tables, Row Level Security, Realtime
 2. [`supabase/migrations/0002_blind_schedule.sql`](supabase/migrations/0002_blind_schedule.sql) — blind schedule as jsonb + blind-clock pause columns
+3. [`supabase/migrations/0003_host_code.sql`](supabase/migrations/0003_host_code.sql) — host recovery code
+4. [`supabase/migrations/0004_duels.sql`](supabase/migrations/0004_duels.sql) — Poker Duel table + duel-linked transactions
 
 Security model:
 

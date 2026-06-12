@@ -1,4 +1,4 @@
-import { Player, Session, Tx } from "./types";
+import { Duel, Player, Session, Tx } from "./types";
 import { chipsToCash } from "./derive";
 import { formatCash, formatChips } from "./format";
 
@@ -13,7 +13,10 @@ export type TvEventKind =
   | "half"
   | "red"
   | "black"
-  | "leader";
+  | "leader"
+  | "duel_challenge"
+  | "duel_declined"
+  | "duel";
 
 export interface TvEvent {
   id: string;
@@ -37,6 +40,9 @@ export const EVENT_ICONS: Record<TvEventKind, string> = {
   red: "▼",
   black: "▲",
   leader: "♛",
+  duel_challenge: "⚔",
+  duel_declined: "⚔",
+  duel: "⚔",
 };
 
 /** Tailwind tone classes per event kind (border + text on the icon chip). */
@@ -52,6 +58,9 @@ export const EVENT_TONES: Record<TvEventKind, string> = {
   red: "border-loss/50 text-loss",
   black: "border-win/50 text-win",
   leader: "border-brass/60 text-brass-bright",
+  duel_challenge: "border-brass/60 text-brass-bright",
+  duel_declined: "border-cream-dim/40 text-cream-dim",
+  duel: "border-brass/60 text-brass-bright",
 };
 
 /** Row background per event kind — wins glow green, trouble glows red, money is brass. */
@@ -67,6 +76,9 @@ export const EVENT_BG_TONES: Record<TvEventKind, string> = {
   red: "bg-loss/10",
   black: "bg-win/10",
   leader: "bg-brass/15",
+  duel_challenge: "bg-brass/15",
+  duel_declined: "bg-cream/5",
+  duel: "bg-brass/15",
 };
 
 interface PlayerTally {
@@ -88,7 +100,12 @@ interface PlayerTally {
  * a realtime refresh yields stable ids — consumers can diff feeds to find
  * what's new.
  */
-export function deriveTvEvents(session: Session, players: Player[], txs: Tx[]): TvEvent[] {
+export function deriveTvEvents(
+  session: Session,
+  players: Player[],
+  txs: Tx[],
+  duels: Duel[] = []
+): TvEvent[] {
   const byId = new Map(players.map((p) => [p.id, p]));
   const events: TvEvent[] = players.map((p) => ({
     id: `join-${p.id}`,
@@ -97,6 +114,50 @@ export function deriveTvEvents(session: Session, players: Player[], txs: Tx[]): 
     playerName: p.name,
     text: `${p.name} joined the table`,
   }));
+
+  // Duel lifecycle — challenges, declines and settled runouts
+  for (const d of duels) {
+    const challenger = byId.get(d.challenger_id)?.name ?? "Someone";
+    const opponent = byId.get(d.opponent_id)?.name ?? "someone";
+    const chips = formatChips(Number(d.chip_amount));
+    events.push({
+      id: `duel-${d.id}-challenge`,
+      at: d.created_at,
+      kind: "duel_challenge",
+      playerName: challenger,
+      text: `${challenger} challenged ${opponent} to a duel — ${chips} chips on the line`,
+    });
+    if (d.status === "declined" && d.settled_at) {
+      events.push({
+        id: `duel-${d.id}-declined`,
+        at: d.settled_at,
+        kind: "duel_declined",
+        playerName: opponent,
+        text: `${opponent} declined the duel`,
+      });
+    } else if (d.status === "cancelled" && d.settled_at) {
+      events.push({
+        id: `duel-${d.id}-cancelled`,
+        at: d.settled_at,
+        kind: "duel_declined",
+        playerName: challenger,
+        text: `${challenger} withdrew the challenge`,
+      });
+    } else if (d.status === "settled" && d.settled_at) {
+      const winner = d.winner_id ? byId.get(d.winner_id)?.name : null;
+      const loser =
+        d.winner_id === d.challenger_id ? opponent : challenger;
+      events.push({
+        id: `duel-${d.id}-result`,
+        at: d.settled_at,
+        kind: "duel",
+        playerName: winner ?? challenger,
+        text: winner
+          ? `${winner} won the duel — ${chips} chips off ${loser}`
+          : `${challenger} and ${opponent} chopped the duel`,
+      });
+    }
+  }
 
   const tally = new Map<string, PlayerTally>();
   const get = (id: string): PlayerTally => {
@@ -139,7 +200,9 @@ export function deriveTvEvents(session: Session, players: Player[], txs: Tx[]): 
     } else if (t.type === "adjustment") {
       s.chips += Number(t.chip_amount);
 
-      // One event per stack count — the most interesting framing wins
+      // One event per stack count — the most interesting framing wins.
+      // Duel transfers keep the tally and milestones but skip the generic
+      // "counted" line (the duel event itself tells the story).
       if (s.chips <= 0) {
         events.push({
           id: t.id,
@@ -164,7 +227,7 @@ export function deriveTvEvents(session: Session, players: Player[], txs: Tx[]): 
           playerName: p.name,
           text: `${p.name} is down to half a stack — ${formatChips(s.chips)} chips`,
         });
-      } else {
+      } else if (!t.duel_id) {
         events.push({
           id: t.id,
           at: t.created_at,

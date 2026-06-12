@@ -28,6 +28,7 @@ export default async function TvPage({
         session={bundle.session}
         players={bundle.players}
         txs={bundle.txs}
+        duels={bundle.duels}
         avatars={bundle.avatars}
       />
     </>

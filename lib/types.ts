@@ -1,6 +1,29 @@
+import type { PlayingCard } from "./poker";
+
 export type SessionStatus = "setup" | "active" | "ended";
 export type PlayerStatus = "active" | "cashed_out";
 export type TxType = "buy_in" | "cash_out" | "adjustment";
+export type DuelStatus = "pending" | "declined" | "cancelled" | "settled";
+
+export interface DuelDeal {
+  /** holes[0] = challenger's cards, holes[1] = opponent's */
+  holes: [PlayingCard[], PlayingCard[]];
+  board: PlayingCard[];
+}
+
+export interface Duel {
+  id: string;
+  session_id: string;
+  challenger_id: string;
+  opponent_id: string;
+  chip_amount: number;
+  status: DuelStatus;
+  deal: DuelDeal | null;
+  /** null on a settled duel = split pot */
+  winner_id: string | null;
+  created_at: string;
+  settled_at: string | null;
+}
 
 export interface BlindLevel {
   level: number;
@@ -54,4 +77,6 @@ export interface Tx {
   cash_amount: number;
   chip_amount: number;
   created_at: string;
+  /** set when this entry is a duel chip transfer (migration 0004) */
+  duel_id?: string | null;
 }

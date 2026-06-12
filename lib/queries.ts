@@ -1,6 +1,6 @@
 import "server-only";
 import { supabaseAdmin } from "./supabase/admin";
-import { Player, Session, Tx } from "./types";
+import { Duel, Player, Session, Tx } from "./types";
 
 export interface SessionListItem extends Session {
   players: { count: number }[];
@@ -42,6 +42,7 @@ export interface SessionBundle {
   session: Session;
   players: Player[];
   txs: Tx[];
+  duels: Duel[];
   /** playerId -> public avatar URL */
   avatars: Record<string, string>;
 }
@@ -62,10 +63,11 @@ export async function getAvatarMap(): Promise<Record<string, string>> {
 
 export async function getSessionBundle(sessionId: string): Promise<SessionBundle | null> {
   const db = supabaseAdmin();
-  const [sessionRes, playersRes, txsRes, avatars] = await Promise.all([
+  const [sessionRes, playersRes, txsRes, duelsRes, avatars] = await Promise.all([
     db.from("sessions").select("*").eq("id", sessionId).maybeSingle(),
     db.from("players").select("*").eq("session_id", sessionId).order("created_at"),
     db.from("transactions").select("*").eq("session_id", sessionId).order("created_at"),
+    db.from("duels").select("*").eq("session_id", sessionId).order("created_at"),
     getAvatarMap(),
   ]);
   if (!sessionRes.data) return null;
@@ -73,6 +75,8 @@ export async function getSessionBundle(sessionId: string): Promise<SessionBundle
     session: sessionRes.data as Session,
     players: (playersRes.data ?? []) as Player[],
     txs: (txsRes.data ?? []) as Tx[],
+    // duelsRes errors before migration 0004 — treat as no duels
+    duels: (duelsRes.data ?? []) as Duel[],
     avatars,
   };
 }

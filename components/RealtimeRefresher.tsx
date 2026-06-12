@@ -25,6 +25,7 @@ export function RealtimeRefresher({ sessionId }: { sessionId: string }) {
       .channel(`session-${sessionId}`)
       .on("postgres_changes", { event: "*", schema: "public", table: "players", filter }, refresh)
       .on("postgres_changes", { event: "*", schema: "public", table: "transactions", filter }, refresh)
+      .on("postgres_changes", { event: "*", schema: "public", table: "duels", filter }, refresh)
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "sessions", filter: `id=eq.${sessionId}` },

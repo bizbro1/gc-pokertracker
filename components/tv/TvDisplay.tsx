@@ -6,10 +6,11 @@ import { blindElapsedMs, isBlindPaused, levelAt, nextLevel, planOf } from "@/lib
 import { sessionTotals } from "@/lib/derive";
 import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
 import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
-import { Player, Session, Tx } from "@/lib/types";
+import { Duel, Player, Session, Tx } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { PnL, StatusBadge } from "@/components/ui";
 import { playEventSound } from "./sounds";
+import { TvDuel } from "./TvDuel";
 import {
   buildLeaderboard,
   TvActivity,
@@ -35,6 +36,7 @@ type TvSceneId =
 
 const SCENE_INTERVAL_MS = 2 * 60 * 1000;
 const CLOCK_SNAP_BACK_MS = 60 * 1000;
+const DUEL_SHOW_MS = 30 * 1000;
 
 const SCENE_LABELS: Record<TvSceneId, string> = {
   clock: "Clock",
@@ -84,12 +86,14 @@ export function TvDisplay({
   session,
   players,
   txs,
+  duels = [],
   avatars,
   onExit,
 }: {
   session: Session;
   players: Player[];
   txs: Tx[];
+  duels?: Duel[];
   avatars: Record<string, string>;
   /** present when rendered as an overlay; absent on the standalone /tv route */
   onExit?: () => void;
@@ -98,9 +102,11 @@ export function TvDisplay({
   const [sceneIdx, setSceneIdx] = useState(0);
   const [muted, setMuted] = useState(false);
   const [toasts, setToasts] = useState<TvEvent[]>([]);
+  const [duelShow, setDuelShow] = useState<{ duel: Duel; startedAt: number } | null>(null);
   const mutedRef = useRef(muted);
   mutedRef.current = muted;
   const seenRef = useRef<Set<string> | null>(null);
+  const shownDuelsRef = useRef<Set<string> | null>(null);
   const prevLevelRef = useRef<number | null>(null);
 
   // Render tick — also gates everything time-dependent off the server render
@@ -130,7 +136,10 @@ export function TvDisplay({
 
   const plan = useMemo(() => planOf(session), [session]);
   const paused = isBlindPaused(session);
-  const events = useMemo(() => deriveTvEvents(session, players, txs), [session, players, txs]);
+  const events = useMemo(
+    () => deriveTvEvents(session, players, txs, duels),
+    [session, players, txs, duels]
+  );
   const totals = sessionTotals(session, players, txs);
   const leaderboard = buildLeaderboard(session, players, txs);
 
@@ -189,7 +198,9 @@ export function TvDisplay({
     if (level !== null) prevLevelRef.current = level;
   }, [current?.level, plan, active]);
 
-  // Event toasts + voice — announce anything that arrives after first paint
+  // Event toasts + voice — announce anything that arrives after first paint.
+  // Duel results are NOT announced here: the runout show reveals the winner
+  // itself, a toast would spoil it.
   useEffect(() => {
     if (seenRef.current === null) {
       seenRef.current = new Set(events.map((e) => e.id));
@@ -200,8 +211,11 @@ export function TvDisplay({
     if (fresh.length === 0) return;
     fresh.forEach((e) => seen.add(e.id));
 
-    setToasts((t) => [...t, ...fresh].slice(-3));
-    fresh.forEach((e) => {
+    const announce = fresh.filter((e) => e.kind !== "duel");
+    if (announce.length === 0) return;
+
+    setToasts((t) => [...t, ...announce].slice(-3));
+    announce.forEach((e) => {
       setTimeout(
         () => setToasts((t) => t.filter((x) => x.id !== e.id)),
         6000
@@ -210,14 +224,14 @@ export function TvDisplay({
 
     if (!mutedRef.current) {
       // Sound effect first (staggered when several land at once), voice after
-      fresh.slice(0, 3).forEach((e, i) => {
+      announce.slice(0, 3).forEach((e, i) => {
         setTimeout(() => {
           if (!mutedRef.current) playEventSound(e.kind);
         }, i * 700);
       });
       if ("speechSynthesis" in window) {
         try {
-          for (const e of fresh) {
+          for (const e of announce) {
             const u = new SpeechSynthesisUtterance(e.text);
             u.rate = 0.95;
             window.speechSynthesis.speak(u);
@@ -229,7 +243,46 @@ export function TvDisplay({
     }
   }, [events]);
 
-  // Snap back to the clock when a level change is imminent
+  // Duel runouts — queue settled duels that arrive while the TV is up and
+  // play them one at a time
+  useEffect(() => {
+    const settled = duels.filter((d) => d.status === "settled" && d.deal);
+    if (shownDuelsRef.current === null) {
+      // First load: anything already settled has had its moment
+      shownDuelsRef.current = new Set(settled.map((d) => d.id));
+      return;
+    }
+    if (duelShow) return;
+    const shown = shownDuelsRef.current;
+    const next = settled
+      .filter(
+        (d) =>
+          !shown.has(d.id) &&
+          players.some((p) => p.id === d.challenger_id) &&
+          players.some((p) => p.id === d.opponent_id)
+      )
+      .sort((a, b) => (a.settled_at ?? "").localeCompare(b.settled_at ?? ""))[0];
+    if (next) {
+      shown.add(next.id);
+      setDuelShow({ duel: next, startedAt: Date.now() });
+    }
+  }, [duels, duelShow, players]);
+
+  // End the runout after its window
+  useEffect(() => {
+    if (!duelShow || now === null) return;
+    if (now - duelShow.startedAt >= DUEL_SHOW_MS) setDuelShow(null);
+  }, [now, duelShow]);
+
+  // A duel runout takes over the whole screen; otherwise snap back to the
+  // clock when a level change is imminent
+  const duelChallenger = duelShow
+    ? players.find((p) => p.id === duelShow.duel.challenger_id)
+    : undefined;
+  const duelOpponent = duelShow
+    ? players.find((p) => p.id === duelShow.duel.opponent_id)
+    : undefined;
+  const duelActive = !!duelShow && now !== null && !!duelChallenger && !!duelOpponent;
   const forceClock =
     active && !paused && remainingMs !== null && remainingMs <= CLOCK_SNAP_BACK_MS;
   const activeIdx = sceneIdx % scenes.length;
@@ -316,9 +369,21 @@ export function TvDisplay({
         <div className="flex min-w-0 flex-1 flex-col">
           <div
             className="flex flex-1 cursor-pointer items-center justify-center"
-            onClick={advanceScene}
+            onClick={duelActive ? undefined : advanceScene}
           >
-            {scene === "clock" ? (
+            {duelActive ? (
+              <div className="tv-scene-anim w-full" key={`duel-${duelShow!.duel.id}`}>
+                <TvDuel
+                  duel={duelShow!.duel}
+                  challenger={duelChallenger!}
+                  opponent={duelOpponent!}
+                  avatars={avatars}
+                  startedAt={duelShow!.startedAt}
+                  now={now!}
+                  muted={muted}
+                />
+              </div>
+            ) : scene === "clock" ? (
               <div className="tv-scene-anim flex flex-col items-center text-center" key="clock">
                 {current ? (
                   <>

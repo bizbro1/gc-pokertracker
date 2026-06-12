@@ -26,7 +26,7 @@ export default async function SessionDashboard({
   const bundle = await getSessionBundle(id);
   if (!bundle) notFound();
 
-  const { session, players, txs, avatars } = bundle;
+  const { session, players, txs, duels, avatars } = bundle;
 
   const jar = await cookies();
   const hostKey = jar.get(hostCookieName(id))?.value;
@@ -133,7 +133,7 @@ export default async function SessionDashboard({
 
         {/* Side column */}
         <div className="space-y-6">
-          <ActivityLog session={session} players={players} txs={txs} />
+          <ActivityLog session={session} players={players} txs={txs} duels={duels} />
           {session.status === "ended" && (
             <Link
               href={`/session/${id}/summary`}

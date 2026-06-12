@@ -1,5 +1,6 @@
 "use server";
 
+import { randomInt } from "crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
@@ -7,8 +8,10 @@ import { supabaseAdmin } from "./supabase/admin";
 import { generateJoinCode, generateSecretKey } from "./keys";
 import { cashToChips, chipsToCash } from "./derive";
 import { structureAsText } from "./blinds";
+import { compareScores, evaluate7, PlayingCard, RANKS, SUITS } from "./poker";
+import { getPlayerIdByKey } from "./queries";
 import { hostCookieName, playerCookieName } from "./cookie-names";
-import { BlindPlan, Session } from "./types";
+import { BlindPlan, DuelDeal, Session } from "./types";
 
 const COOKIE_OPTS = {
   httpOnly: true,
@@ -292,6 +295,200 @@ export async function removePlayer(sessionId: string, playerId: string): Promise
       .delete()
       .eq("id", playerId)
       .eq("session_id", sessionId);
+    if (error) throw new Error(error.message);
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Poker Duel — a fun side-game between two players, settled by the server
+// and showcased on the TV.
+// ---------------------------------------------------------------------------
+
+async function getCallerPlayerId(sessionId: string): Promise<string | null> {
+  const jar = await cookies();
+  return getPlayerIdByKey(jar.get(playerCookieName(sessionId))?.value);
+}
+
+/** Crypto-shuffled 52-card deck. */
+function shuffledDeck(): PlayingCard[] {
+  const deck: PlayingCard[] = [];
+  for (const suit of SUITS) for (const rank of RANKS) deck.push({ rank, suit });
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = randomInt(i + 1);
+    [deck[i], deck[j]] = [deck[j]!, deck[i]!];
+  }
+  return deck;
+}
+
+export async function challengeDuel(
+  sessionId: string,
+  opponentId: string,
+  chipAmount: number
+): Promise<ActionResult> {
+  try {
+    const caller = await getCallerPlayerId(sessionId);
+    if (!caller) return { ok: false, error: "Join the session first" };
+    if (caller === opponentId) return { ok: false, error: "You can't duel yourself" };
+
+    const amount = Math.round(chipAmount);
+    if (!Number.isFinite(amount) || amount <= 0)
+      return { ok: false, error: "The wager must be a positive chip amount" };
+
+    const session = await getSession(sessionId);
+    if (session.status !== "active")
+      return { ok: false, error: "Duels only happen at a live table" };
+
+    const db = supabaseAdmin();
+    const { data: fighters, error: playersError } = await db
+      .from("players")
+      .select("id, status")
+      .eq("session_id", sessionId)
+      .in("id", [caller, opponentId]);
+    if (playersError) throw new Error(playersError.message);
+    if (
+      (fighters ?? []).length !== 2 ||
+      (fighters ?? []).some((p) => p.status !== "active")
+    )
+      return { ok: false, error: "Both players must be in the game" };
+
+    // One open challenge per player keeps the table sane
+    const { data: open, error: openError } = await db
+      .from("duels")
+      .select("id, challenger_id, opponent_id")
+      .eq("session_id", sessionId)
+      .eq("status", "pending");
+    if (openError) throw new Error(openError.message);
+    const busy = (open ?? []).some(
+      (d) =>
+        [d.challenger_id, d.opponent_id].includes(caller) ||
+        [d.challenger_id, d.opponent_id].includes(opponentId)
+    );
+    if (busy) return { ok: false, error: "There's already an open challenge at the table" };
+
+    const { error } = await db.from("duels").insert({
+      session_id: sessionId,
+      challenger_id: caller,
+      opponent_id: opponentId,
+      chip_amount: amount,
+    });
+    if (error) throw new Error(error.message);
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function respondToDuel(
+  sessionId: string,
+  duelId: string,
+  accept: boolean
+): Promise<ActionResult> {
+  try {
+    const caller = await getCallerPlayerId(sessionId);
+    if (!caller) return { ok: false, error: "Join the session first" };
+
+    const db = supabaseAdmin();
+    const { data: duel, error: duelError } = await db
+      .from("duels")
+      .select("*")
+      .eq("id", duelId)
+      .eq("session_id", sessionId)
+      .maybeSingle();
+    if (duelError) throw new Error(duelError.message);
+    if (!duel || duel.status !== "pending")
+      return { ok: false, error: "This challenge is no longer open" };
+    if (duel.opponent_id !== caller)
+      return { ok: false, error: "This challenge isn't yours to answer" };
+
+    if (!accept) {
+      const { error } = await db
+        .from("duels")
+        .update({ status: "declined", settled_at: new Date().toISOString() })
+        .eq("id", duelId)
+        .eq("status", "pending");
+      if (error) throw new Error(error.message);
+      refresh(sessionId);
+      return { ok: true };
+    }
+
+    // Deal: 2 hole cards each (holes[0] = challenger) + a full board
+    const deck = shuffledDeck();
+    const deal: DuelDeal = {
+      holes: [
+        [deck[0]!, deck[1]!],
+        [deck[2]!, deck[3]!],
+      ],
+      board: deck.slice(4, 9),
+    };
+    const a = evaluate7([...deal.holes[0], ...deal.board]);
+    const b = evaluate7([...deal.holes[1], ...deal.board]);
+    const cmp = compareScores(a.score, b.score);
+    const winnerId = cmp > 0 ? duel.challenger_id : cmp < 0 ? duel.opponent_id : null;
+
+    // Guard with status=pending so a double-tap can't settle twice
+    const { data: settled, error: settleError } = await db
+      .from("duels")
+      .update({
+        status: "settled",
+        deal,
+        winner_id: winnerId,
+        settled_at: new Date().toISOString(),
+      })
+      .eq("id", duelId)
+      .eq("status", "pending")
+      .select("id")
+      .maybeSingle();
+    if (settleError) throw new Error(settleError.message);
+    if (!settled) return { ok: false, error: "This challenge is no longer open" };
+
+    if (winnerId) {
+      const loserId =
+        winnerId === duel.challenger_id ? duel.opponent_id : duel.challenger_id;
+      const amount = Number(duel.chip_amount);
+      const { error: txError } = await db.from("transactions").insert([
+        {
+          session_id: sessionId,
+          player_id: winnerId,
+          type: "adjustment",
+          cash_amount: 0,
+          chip_amount: amount,
+          duel_id: duelId,
+        },
+        {
+          session_id: sessionId,
+          player_id: loserId,
+          type: "adjustment",
+          cash_amount: 0,
+          chip_amount: -amount,
+          duel_id: duelId,
+        },
+      ]);
+      if (txError) throw new Error(txError.message);
+    }
+
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
+
+export async function cancelDuel(sessionId: string, duelId: string): Promise<ActionResult> {
+  try {
+    const caller = await getCallerPlayerId(sessionId);
+    if (!caller) return { ok: false, error: "Join the session first" };
+    const { error } = await supabaseAdmin()
+      .from("duels")
+      .update({ status: "cancelled", settled_at: new Date().toISOString() })
+      .eq("id", duelId)
+      .eq("session_id", sessionId)
+      .eq("challenger_id", caller)
+      .eq("status", "pending");
     if (error) throw new Error(error.message);
     refresh(sessionId);
     return { ok: true };

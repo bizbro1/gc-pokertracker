@@ -12,7 +12,7 @@ import {
   TvEvent,
   TvEventKind,
 } from "@/lib/tvEvents";
-import { Player, Session, Tx } from "@/lib/types";
+import { Duel, Player, Session, Tx } from "@/lib/types";
 
 function timeOf(at: string): string {
   const d = new Date(at);
@@ -36,15 +36,23 @@ export function ActivityLog({
   session,
   players,
   txs,
+  duels = [],
 }: {
   session: Session;
   players: Player[];
   txs: Tx[];
+  duels?: Duel[];
 }) {
   const [pending, startTransition] = useTransition();
   const events = useMemo(
-    () => deriveTvEvents(session, players, txs).reverse(),
-    [session, players, txs]
+    () => deriveTvEvents(session, players, txs, duels).reverse(),
+    [session, players, txs, duels]
+  );
+
+  // Duel transfers are paired (+/−) — undoing one side would corrupt the books
+  const duelTxIds = useMemo(
+    () => new Set(txs.filter((t) => t.duel_id).map((t) => t.id)),
+    [txs]
   );
 
   function undo(e: TvEvent) {
@@ -75,7 +83,7 @@ export function ActivityLog({
             <span className="text-xs tabular-nums text-cream-faint" suppressHydrationWarning>
               {timeOf(e.at)}
             </span>
-            {UNDOABLE.has(e.kind) && (
+            {UNDOABLE.has(e.kind) && !duelTxIds.has(e.id) && (
               <button
                 type="button"
                 disabled={pending}
