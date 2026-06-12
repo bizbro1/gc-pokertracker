@@ -314,6 +314,26 @@ async function getCallerPlayerId(sessionId: string): Promise<string | null> {
   return getPlayerIdByKey(jar.get(playerCookieName(sessionId))?.value);
 }
 
+/** Current tracked chips per player (buy-ins + adjustments − cash-outs). */
+async function currentChipsForPlayers(
+  sessionId: string,
+  playerIds: string[]
+): Promise<Map<string, number>> {
+  const { data, error } = await supabaseAdmin()
+    .from("transactions")
+    .select("player_id, type, chip_amount")
+    .eq("session_id", sessionId)
+    .in("player_id", playerIds);
+  if (error) throw new Error(error.message);
+  const map = new Map(playerIds.map((id) => [id, 0]));
+  for (const t of data ?? []) {
+    const cur = map.get(t.player_id) ?? 0;
+    const chips = Number(t.chip_amount);
+    map.set(t.player_id, t.type === "cash_out" ? cur - chips : cur + chips);
+  }
+  return map;
+}
+
 /** Crypto-shuffled 52-card deck. */
 function shuffledDeck(): PlayingCard[] {
   const deck: PlayingCard[] = [];
@@ -355,6 +375,15 @@ export async function challengeDuel(
       (fighters ?? []).some((p) => p.status !== "active")
     )
       return { ok: false, error: "Both players must be in the game" };
+
+    // Nobody duels into debt — the wager must fit both stacks
+    const chips = await currentChipsForPlayers(sessionId, [caller, opponentId]);
+    const mine = chips.get(caller) ?? 0;
+    const theirs = chips.get(opponentId) ?? 0;
+    if (amount > mine)
+      return { ok: false, error: `You only have ${Math.max(0, mine)} chips` };
+    if (amount > theirs)
+      return { ok: false, error: `They only have ${Math.max(0, theirs)} chips` };
 
     // One open challenge per player keeps the table sane
     const { data: open, error: openError } = await db
@@ -416,6 +445,21 @@ export async function respondToDuel(
       refresh(sessionId);
       return { ok: true };
     }
+
+    // Stacks may have moved since the challenge — never let a loss go negative
+    const wager = Number(duel.chip_amount);
+    const chips = await currentChipsForPlayers(sessionId, [
+      duel.challenger_id,
+      duel.opponent_id,
+    ]);
+    if (
+      wager > (chips.get(duel.challenger_id) ?? 0) ||
+      wager > (chips.get(duel.opponent_id) ?? 0)
+    )
+      return {
+        ok: false,
+        error: "The wager no longer fits someone's stack — decline and challenge again",
+      };
 
     // Deal: 2 hole cards each (holes[0] = challenger) + a full board
     const deck = shuffledDeck();

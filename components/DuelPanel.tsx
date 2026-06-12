@@ -20,12 +20,15 @@ export function DuelPanel({
   players,
   duels,
   avatars,
+  chipsById = {},
 }: {
   sessionId: string;
   myId: string;
   players: Player[];
   duels: Duel[];
   avatars: Record<string, string>;
+  /** current tracked chips per player — caps the wager */
+  chipsById?: Record<string, number>;
 }) {
   const opponents = players.filter((p) => p.id !== myId && p.status === "active");
   const [opponentId, setOpponentId] = useState("");
@@ -38,6 +41,12 @@ export function DuelPanel({
   useEffect(() => setMounted(true), []);
 
   const nameOf = (id: string) => players.find((p) => p.id === id)?.name ?? "Unknown";
+
+  // Nobody duels into debt: the wager can't exceed either stack
+  const myChips = Math.max(0, chipsById[myId] ?? 0);
+  const theirChips = opponentId ? Math.max(0, chipsById[opponentId] ?? 0) : Infinity;
+  const maxWager = Math.min(myChips, theirChips);
+  const overMax = opponentId !== "" && amount > maxWager;
 
   const open = duels.find(
     (d) => d.status === "pending" && (d.challenger_id === myId || d.opponent_id === myId)
@@ -193,14 +202,26 @@ export function DuelPanel({
                     <Input
                       type="number"
                       min={1}
+                      max={opponentId ? maxWager : undefined}
                       value={amount}
                       onChange={(e) => setAmount(Math.max(1, Number(e.target.value) || 1))}
+                      className={cn(overMax && "border-loss/60")}
                     />
+                    {opponentId !== "" && (
+                      <p
+                        className={cn(
+                          "mt-1 text-[10px] tabular-nums",
+                          overMax ? "text-loss" : "text-cream-faint"
+                        )}
+                      >
+                        Max {formatChips(maxWager)} — {myChips <= theirChips ? "your" : `${nameOf(opponentId)}'s`} stack
+                      </p>
+                    )}
                   </div>
                 </div>
                 <Button
                   className="w-full"
-                  disabled={pending || !opponentId}
+                  disabled={pending || !opponentId || overMax || maxWager < 1}
                   onClick={() => run(() => challengeDuel(sessionId, opponentId, amount))}
                 >
                   ⚔ Throw the gauntlet

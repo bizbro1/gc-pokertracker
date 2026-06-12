@@ -122,6 +122,10 @@ export default async function PlayerView({
           players={players}
           duels={duels}
           avatars={avatars}
+          chipsById={{
+            [me.id]: myStats.currentChips,
+            ...Object.fromEntries(others.map(({ player, stats }) => [player.id, stats.currentChips])),
+          }}
         />
       )}
 
