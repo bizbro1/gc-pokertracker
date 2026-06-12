@@ -9,7 +9,7 @@ import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
 import { Duel, Player, Session, Tx } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { PnL, StatusBadge } from "@/components/ui";
-import { playLevelUpChime, preloadSounds } from "./sounds";
+import { playEventSound, playLevelUpChime, preloadSounds } from "./sounds";
 import { TvDuel } from "./TvDuel";
 import {
   buildLeaderboard,
@@ -193,7 +193,6 @@ export function TvDisplay({
     const announce = fresh.filter((e) => e.kind !== "duel");
     if (announce.length === 0) return;
 
-    // Silent toasts — sounds and voice on activities were more noise than fun
     setToasts((t) => [...t, ...announce].slice(-3));
     announce.forEach((e) => {
       setTimeout(
@@ -201,6 +200,15 @@ export function TvDisplay({
         6000
       );
     });
+
+    // Themed clip per activity, staggered when several land at once
+    if (!mutedRef.current) {
+      announce.slice(0, 3).forEach((e, i) => {
+        setTimeout(() => {
+          if (!mutedRef.current) playEventSound(e.kind);
+        }, i * 800);
+      });
+    }
   }, [events]);
 
   // Duel runouts — queue settled duels that arrive while the TV is up and
