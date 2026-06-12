@@ -34,7 +34,9 @@ type TvSceneId =
   | "join"
   | "hands";
 
-const SCENE_INTERVAL_MS = 2 * 60 * 1000;
+// The clock + leaderboard is home; other scenes take short turns between
+const CLOCK_DWELL_MS = 90 * 1000;
+const SIDE_DWELL_MS = 20 * 1000;
 const CLOCK_SNAP_BACK_MS = 60 * 1000;
 const DUEL_SHOW_MS = 32 * 1000;
 
@@ -77,7 +79,8 @@ export function TvDisplay({
   onExit?: () => void;
 }) {
   const [now, setNow] = useState<number | null>(null);
-  const [sceneIdx, setSceneIdx] = useState(0);
+  const [atHome, setAtHome] = useState(true);
+  const [sideIdx, setSideIdx] = useState(0);
   const [muted, setMuted] = useState(false);
   const [toasts, setToasts] = useState<TvEvent[]>([]);
   const [duelShow, setDuelShow] = useState<{ duel: Duel; startedAt: number } | null>(null);
@@ -162,12 +165,26 @@ export function TvDisplay({
     return s;
   }, [players.length, txs.length, events.length, plan, active, ended]);
 
-  // Auto-advance; depends on sceneIdx so a manual change restarts the timer
+  const sideScenes = useMemo(() => scenes.filter((s) => s !== "clock"), [scenes]);
+
+  // Home (clock + leaderboard) most of the time; a side scene drops in for a
+  // short turn, then back home and the next one queues up. Manual changes
+  // restart the dwell timer via the deps.
   useEffect(() => {
-    if (scenes.length <= 1) return;
-    const id = setInterval(() => setSceneIdx((i) => i + 1), SCENE_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [scenes.length, sceneIdx]);
+    if (sideScenes.length === 0) return;
+    const id = setTimeout(
+      () => {
+        if (atHome) {
+          setAtHome(false);
+        } else {
+          setAtHome(true);
+          setSideIdx((i) => i + 1);
+        }
+      },
+      atHome ? CLOCK_DWELL_MS : SIDE_DWELL_MS
+    );
+    return () => clearTimeout(id);
+  }, [atHome, sideIdx, sideScenes.length]);
 
   // Level-up chime
   useEffect(() => {
@@ -268,10 +285,20 @@ export function TvDisplay({
   const duelActive = !!duelShow && now !== null && !!duelChallenger && !!duelOpponent;
   const forceClock =
     active && !paused && remainingMs !== null && remainingMs <= CLOCK_SNAP_BACK_MS;
-  const activeIdx = sceneIdx % scenes.length;
-  const scene: TvSceneId = forceClock ? "clock" : (scenes[activeIdx] ?? "clock");
+  const currentSide =
+    sideScenes.length > 0 ? sideScenes[sideIdx % sideScenes.length]! : "clock";
+  const scene: TvSceneId = forceClock || atHome ? "clock" : currentSide;
 
-  const advanceScene = () => scenes.length > 1 && setSceneIdx((i) => i + 1);
+  // Tap to peek at the next scene; tap again to go back home
+  const advanceScene = () => {
+    if (sideScenes.length === 0) return;
+    if (atHome) {
+      setAtHome(false);
+    } else {
+      setAtHome(true);
+      setSideIdx((i) => i + 1);
+    }
+  };
 
   const handleFullscreen = () => {
     if (document.fullscreenElement) void document.exitFullscreen();
@@ -446,19 +473,34 @@ export function TvDisplay({
             )}
           </div>
 
-          {/* Scene dots */}
-          {scenes.length > 1 && (
+          {/* Scene dots — first is home (clock), the rest jump to a scene */}
+          {sideScenes.length > 0 && (
             <div className="flex items-center justify-center gap-3 py-4">
-              {scenes.map((s, i) => (
+              <button
+                type="button"
+                onClick={() => {
+                  setAtHome(true);
+                }}
+                aria-label="Scene: Clock"
+                title={SCENE_LABELS.clock}
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full transition",
+                  scene === "clock" ? "scale-125 bg-brass" : "bg-white/15 hover:bg-white/30"
+                )}
+              />
+              {sideScenes.map((s, i) => (
                 <button
                   key={s}
                   type="button"
-                  onClick={() => setSceneIdx(i)}
+                  onClick={() => {
+                    setSideIdx(i);
+                    setAtHome(false);
+                  }}
                   aria-label={`Scene: ${SCENE_LABELS[s]}`}
                   title={SCENE_LABELS[s]}
                   className={cn(
                     "h-2.5 w-2.5 rounded-full transition",
-                    i === activeIdx && !forceClock
+                    !atHome && !forceClock && i === sideIdx % sideScenes.length
                       ? "scale-125 bg-brass"
                       : "bg-white/15 hover:bg-white/30"
                   )}
