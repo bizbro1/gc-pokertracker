@@ -8,6 +8,7 @@ import { supabaseAdmin } from "./supabase/admin";
 import { generateJoinCode, generateSecretKey } from "./keys";
 import { cashToChips, chipsToCash } from "./derive";
 import { structureAsText } from "./blinds";
+import { blindElapsedMs, levelAt, nextLevel, planOf } from "./blindSchedule";
 import { compareScores, evaluate7, PlayingCard, RANKS, SUITS } from "./poker";
 import { getPlayerIdByKey } from "./queries";
 import { hostCookieName, playerCookieName } from "./cookie-names";
@@ -500,6 +501,79 @@ export async function cancelDuel(sessionId: string, duelId: string): Promise<Act
 // ---------------------------------------------------------------------------
 // Blind clock
 // ---------------------------------------------------------------------------
+
+export type BlindScheduleOp =
+  | { type: "extend"; minutes: number }
+  | { type: "skip" }
+  | { type: "break"; minutes: number };
+
+/**
+ * Mid-game schedule surgery: stretch the current level, jump to the next
+ * one, or slot a break in after this level. Always writes the result to the
+ * jsonb column — legacy notes-based schedules get upgraded on first edit.
+ */
+export async function adjustBlindSchedule(
+  sessionId: string,
+  op: BlindScheduleOp
+): Promise<ActionResult> {
+  try {
+    await requireHost(sessionId);
+    const session = await getSession(sessionId);
+    if (session.status !== "active" || !session.started_at)
+      return { ok: false, error: "The clock only runs at a live table" };
+    const plan = planOf(session);
+    if (!plan) return { ok: false, error: "This session has no blind schedule" };
+
+    const elapsedMin = Math.floor(blindElapsedMs(session, Date.now()) / 60000);
+    const current = levelAt(plan, elapsedMin);
+    if (!current) return { ok: false, error: "No level in play yet" };
+    const next = nextLevel(plan, current);
+
+    let levels = plan.levels;
+    if (op.type === "extend") {
+      const minutes = Math.max(1, Math.round(op.minutes));
+      levels = levels.map((l) =>
+        l.startsAtMin > current.startsAtMin ? { ...l, startsAtMin: l.startsAtMin + minutes } : l
+      );
+    } else if (op.type === "skip") {
+      if (!next) return { ok: false, error: "This is the final level" };
+      const delta = next.startsAtMin - elapsedMin;
+      if (delta > 0) {
+        levels = levels.map((l) =>
+          l.startsAtMin >= next.startsAtMin ? { ...l, startsAtMin: l.startsAtMin - delta } : l
+        );
+      }
+    } else {
+      if (!next) return { ok: false, error: "This is the final level — just play" };
+      const minutes = Math.max(1, Math.round(op.minutes));
+      const i = levels.findIndex(
+        (l) => l.startsAtMin === next.startsAtMin && l.level === next.level
+      );
+      const pause: typeof levels[number] = {
+        level: current.level,
+        smallBlind: current.smallBlind,
+        bigBlind: current.bigBlind,
+        startsAtMin: next.startsAtMin,
+        isBreak: true,
+      };
+      levels = [
+        ...levels.slice(0, i),
+        pause,
+        ...levels.slice(i).map((l) => ({ ...l, startsAtMin: l.startsAtMin + minutes })),
+      ];
+    }
+
+    const { error } = await supabaseAdmin()
+      .from("sessions")
+      .update({ blind_schedule: { levelMin: plan.levelMin, levels } })
+      .eq("id", sessionId);
+    if (error) throw new Error(error.message);
+    refresh(sessionId);
+    return { ok: true };
+  } catch (e) {
+    return fail(e);
+  }
+}
 
 export async function pauseBlindClock(sessionId: string): Promise<ActionResult> {
   try {

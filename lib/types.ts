@@ -31,6 +31,8 @@ export interface BlindLevel {
   bigBlind: number;
   /** minutes from the start of the game */
   startsAtMin: number;
+  /** a scheduled break — blinds hold, the clock counts down to the next level */
+  isBreak?: boolean;
 }
 
 export interface BlindPlan {

@@ -7,6 +7,7 @@ import {
   levelAt,
   nextLevel,
   planOf,
+  realLevelCount,
 } from "@/lib/blindSchedule";
 import { formatChips } from "@/lib/format";
 import { Session } from "@/lib/types";
@@ -49,7 +50,9 @@ export function SessionTimer({ session }: { session: Session }) {
       const current = levelAt(plan, blindSec / 60);
       if (current) {
         const next = nextLevel(plan, current);
-        label = `Level ${current.level}/${plan.levels.length} · ${formatChips(current.smallBlind)}/${formatChips(current.bigBlind)}`;
+        label = current.isBreak
+          ? `Break${next && !next.isBreak ? ` · back at ${formatChips(next.smallBlind)}/${formatChips(next.bigBlind)}` : ""}`
+          : `Level ${current.level}/${realLevelCount(plan)} · ${formatChips(current.smallBlind)}/${formatChips(current.bigBlind)}`;
         value = paused ? "Paused" : next ? clock(next.startsAtMin * 60 - blindSec) : "Final level";
       }
     }

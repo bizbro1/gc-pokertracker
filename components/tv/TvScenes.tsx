@@ -382,7 +382,12 @@ export function TvActivity({ events }: { events: TvEvent[] }) {
 export function TvSchedule({ plan, elapsedMin }: { plan: BlindPlan; elapsedMin: number }) {
   const current = levelAt(plan, elapsedMin);
   // Window of up to 9 levels centered on the current one
-  const idx = Math.max(0, plan.levels.findIndex((l) => l.level === current?.level));
+  const idx = Math.max(
+    0,
+    plan.levels.findIndex(
+      (l) => l.level === current?.level && l.startsAtMin === current?.startsAtMin
+    )
+  );
   const start = Math.max(0, Math.min(idx - 3, plan.levels.length - 9));
   const visible = plan.levels.slice(start, start + 9);
 
@@ -400,22 +405,23 @@ export function TvSchedule({ plan, elapsedMin }: { plan: BlindPlan; elapsedMin: 
         </thead>
         <tbody>
           {visible.map((l) => {
-            const here = l.level === current?.level;
+            const here =
+              l.level === current?.level && l.startsAtMin === current?.startsAtMin;
             return (
               <tr
-                key={l.level}
+                key={`${l.level}-${l.startsAtMin}`}
                 className={cn(
                   "border-t border-white/5",
                   here && "bg-brass/10",
                   !here && l.startsAtMin < (current?.startsAtMin ?? 0) && "opacity-40"
                 )}
               >
-                <td className="px-4 py-3 text-cream-dim">L{l.level}</td>
+                <td className="px-4 py-3 text-cream-dim">{l.isBreak ? "☕" : `L${l.level}`}</td>
                 <td className="px-4 py-3 text-cream-dim">
                   {Math.floor(l.startsAtMin / 60)}:{String(l.startsAtMin % 60).padStart(2, "0")}
                 </td>
                 <td className={cn("px-4 py-3 text-right", here ? "text-brass-bright" : "text-cream")}>
-                  {formatChips(l.smallBlind)} / {formatChips(l.bigBlind)}
+                  {l.isBreak ? "Break" : `${formatChips(l.smallBlind)} / ${formatChips(l.bigBlind)}`}
                 </td>
                 <td className="px-4 py-3 text-left text-base uppercase tracking-[0.2em] text-brass">
                   {here && "● You are here"}

@@ -2,7 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
-import { blindElapsedMs, isBlindPaused, levelAt, nextLevel, planOf } from "@/lib/blindSchedule";
+import {
+  blindElapsedMs,
+  isBlindPaused,
+  levelAt,
+  nextLevel,
+  planOf,
+  realLevelCount,
+} from "@/lib/blindSchedule";
 import { sessionTotals } from "@/lib/derive";
 import { formatCash, formatChips, formatSignedCash } from "@/lib/format";
 import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
@@ -398,14 +405,22 @@ export function TvDisplay({
                 {current ? (
                   <>
                     <span className="text-base uppercase tracking-[0.4em] text-cream-dim">
-                      Level {current.level}
-                      {plan && <span className="text-cream-faint"> / {plan.levels.length}</span>}
+                      {current.isBreak ? "Stretch your legs" : `Level ${current.level}`}
+                      {plan && !current.isBreak && (
+                        <span className="text-cream-faint"> / {realLevelCount(plan)}</span>
+                      )}
                     </span>
-                    <div className="mt-4 font-display text-[7rem] leading-none brass-text tabular-nums">
-                      {formatChips(current.smallBlind)}
-                      <span className="mx-4 text-cream-faint">/</span>
-                      {formatChips(current.bigBlind)}
-                    </div>
+                    {current.isBreak ? (
+                      <div className="mt-4 font-display text-[7rem] leading-none brass-text">
+                        BREAK
+                      </div>
+                    ) : (
+                      <div className="mt-4 font-display text-[7rem] leading-none brass-text tabular-nums">
+                        {formatChips(current.smallBlind)}
+                        <span className="mx-4 text-cream-faint">/</span>
+                        {formatChips(current.bigBlind)}
+                      </div>
+                    )}
                     <div
                       className={cn(
                         "mt-8 font-display text-8xl tabular-nums",
@@ -424,7 +439,10 @@ export function TvDisplay({
                     </div>
                     {next && (
                       <p className="mt-4 text-lg uppercase tracking-[0.25em] text-cream-dim">
-                        Next: {formatChips(next.smallBlind)} / {formatChips(next.bigBlind)}
+                        {current.isBreak ? "Back at" : "Next"}:{" "}
+                        {next.isBreak
+                          ? "Break"
+                          : `${formatChips(next.smallBlind)} / ${formatChips(next.bigBlind)}`}
                       </p>
                     )}
                     <div className="mt-8 h-2 w-[36rem] max-w-full overflow-hidden rounded-full bg-white/10">

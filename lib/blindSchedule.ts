@@ -68,6 +68,14 @@ export function levelAt(plan: BlindPlan, elapsedMin: number): BlindLevel | null 
 }
 
 export function nextLevel(plan: BlindPlan, current: BlindLevel): BlindLevel | null {
-  const i = plan.levels.findIndex((l) => l.level === current.level);
-  return plan.levels[i + 1] ?? null;
+  // Position-based: breaks don't carry unique level numbers
+  const i = plan.levels.findIndex(
+    (l) => l.startsAtMin === current.startsAtMin && l.level === current.level
+  );
+  return i >= 0 ? (plan.levels[i + 1] ?? null) : null;
+}
+
+/** How many actual blind levels the plan has (breaks excluded). */
+export function realLevelCount(plan: BlindPlan): number {
+  return plan.levels.filter((l) => !l.isBreak).length;
 }
