@@ -9,8 +9,11 @@ import { Duel, Player } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { playCardFlip, playDuelSting, playDuelWin } from "./sounds";
 
+/** Seconds into the show when each hole card flips — dealt alternately:
+ *  challenger 1st, opponent 1st, challenger 2nd, opponent 2nd. */
+const HOLE_AT = [2, 3.5, 5, 6.5];
 /** Seconds into the show when board card i flips — one at a time. */
-const REVEAL_AT = [5, 9, 13, 17, 21];
+const REVEAL_AT = [10, 14, 18, 22, 26];
 
 const STAGE_LABEL = [
   "Pre-flop",
@@ -73,6 +76,13 @@ export function TvDuel({
 }) {
   const deal = duel.deal!;
   const t = (now - startedAt) / 1000;
+  /** hole cards dealt so far (0..4): A1, B1, A2, B2 */
+  const holeCount = HOLE_AT.filter((s) => t >= s).length;
+  const holesDone = holeCount === 4;
+  const holeShown = [
+    (holeCount >= 1 ? 1 : 0) + (holeCount >= 3 ? 1 : 0), // challenger
+    (holeCount >= 2 ? 1 : 0) + (holeCount >= 4 ? 1 : 0), // opponent
+  ];
   /** number of board cards revealed so far, 0..5 */
   const stage = REVEAL_AT.filter((s) => t >= s).length;
   const decided = stage === 5;
@@ -97,17 +107,23 @@ export function TvDuel({
     [deal]
   );
 
-  // Stage soundtrack + winner announcement, once per stage
-  const prevStage = useRef(-1);
+  // Soundtrack: sting on entry, a flip per dealt hole card and board card,
+  // fanfare at the river — each fired once
+  const prevHole = useRef(-1);
+  useEffect(() => {
+    if (holeCount === prevHole.current) return;
+    const first = prevHole.current === -1;
+    prevHole.current = holeCount;
+    if (muted) return;
+    if (first && holeCount === 0) playDuelSting();
+    else playCardFlip();
+  }, [holeCount, muted]);
+
+  const prevStage = useRef(0);
   useEffect(() => {
     if (stage === prevStage.current) return;
-    const first = prevStage.current === -1;
     prevStage.current = stage;
     if (muted) return;
-    if (first && stage === 0) {
-      playDuelSting();
-      return;
-    }
     playCardFlip();
     if (stage === 5) setTimeout(() => playDuelWin(), 600);
   }, [stage, muted]);
@@ -115,12 +131,15 @@ export function TvDuel({
   function Fighter({
     player,
     hole,
+    shown,
     pct,
     winner,
     hand,
   }: {
     player: Player;
     hole: PlayingCard[];
+    /** how many of the hole cards are face-up yet */
+    shown: number;
     pct: number;
     winner: boolean;
     hand: string;
@@ -140,14 +159,14 @@ export function TvDuel({
         <p className="max-w-full truncate font-display text-3xl text-cream">{player.name}</p>
         <div className="flex gap-3">
           {hole.map((c, i) => (
-            <BigCard key={i} card={c} />
+            <BigCard key={i} card={c} faceDown={i >= shown} />
           ))}
         </div>
         <p
           className="font-display text-6xl tabular-nums transition-colors duration-700"
-          style={{ color: pctColor(pct) }}
+          style={holesDone ? { color: pctColor(pct) } : undefined}
         >
-          {pct}%
+          {holesDone ? `${pct}%` : <span className="text-cream-faint">—</span>}
         </p>
         {decided && (
           <p className={cn("text-center text-sm", winner ? "text-brass-bright" : "text-cream-dim")}>
@@ -169,7 +188,11 @@ export function TvDuel({
           {formatChips(Number(duel.chip_amount))} chips on the line
         </p>
         <p className="mt-1 text-xs uppercase tracking-[0.3em] text-cream-dim">
-          {decided && chop ? "Chopped — split pot" : STAGE_LABEL[stage]}
+          {!holesDone
+            ? "The deal"
+            : decided && chop
+              ? "Chopped — split pot"
+              : STAGE_LABEL[stage]}
         </p>
       </div>
 
@@ -177,6 +200,7 @@ export function TvDuel({
         <Fighter
           player={challenger}
           hole={deal.holes[0]}
+          shown={holeShown[0]!}
           pct={eq.a}
           winner={challengerWins}
           hand={hands.a}
@@ -191,6 +215,7 @@ export function TvDuel({
         <Fighter
           player={opponent}
           hole={deal.holes[1]}
+          shown={holeShown[1]!}
           pct={eq.b}
           winner={!challengerWins && !chop}
           hand={hands.b}

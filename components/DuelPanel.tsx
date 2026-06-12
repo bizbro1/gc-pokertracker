@@ -42,9 +42,9 @@ export function DuelPanel({
   const open = duels.find(
     (d) => d.status === "pending" && (d.challenger_id === myId || d.opponent_id === myId)
   );
-  // The TV runout takes ~32s — phones don't learn the result before the
+  // The TV runout takes ~38s — phones don't learn the result before the
   // river hits the screen
-  const REVEAL_MS = 35_000;
+  const REVEAL_MS = 42_000;
   const mySettled = mounted
     ? [...duels]
         .filter(

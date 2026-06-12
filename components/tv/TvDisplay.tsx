@@ -45,7 +45,7 @@ type TvSceneId =
 const CLOCK_DWELL_MS = 90 * 1000;
 const SIDE_DWELL_MS = 20 * 1000;
 const CLOCK_SNAP_BACK_MS = 60 * 1000;
-const DUEL_SHOW_MS = 32 * 1000;
+const DUEL_SHOW_MS = 38 * 1000;
 
 const SCENE_LABELS: Record<TvSceneId, string> = {
   clock: "Clock",

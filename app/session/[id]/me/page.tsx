@@ -34,7 +34,7 @@ export default async function PlayerView({
 
   // Chip transfers from a duel still playing out on the TV stay invisible
   // here — a jumping stack number would spoil the runout
-  const REVEAL_MS = 35_000;
+  const REVEAL_MS = 42_000;
   const freshDuels = new Set(
     duels
       .filter(
@@ -94,19 +94,13 @@ export default async function PlayerView({
             chips &asymp; {formatCash(myStats.currentValue, session.currency_code)}
           </p>
         </div>
-        <div className="grid grid-cols-3 divide-x divide-white/5 text-center">
+        <div className="grid grid-cols-2 divide-x divide-white/5 text-center">
           <div className="px-2 py-4">
             <p className="text-[9px] uppercase tracking-[0.2em] text-cream-dim">Buy-ins</p>
             <p className="mt-1 text-sm tabular-nums text-cream">
               {formatCash(myStats.buyInCash, session.currency_code)}
             </p>
             <p className="text-[10px] text-cream-faint tabular-nums">&times;{myStats.buyInCount}</p>
-          </div>
-          <div className="px-2 py-4">
-            <p className="text-[9px] uppercase tracking-[0.2em] text-cream-dim">Cashed out</p>
-            <p className="mt-1 text-sm tabular-nums text-cream">
-              {formatCash(myStats.cashOutCash, session.currency_code)}
-            </p>
           </div>
           <div className="px-2 py-4">
             <p className="text-[9px] uppercase tracking-[0.2em] text-cream-dim">P / L</p>
