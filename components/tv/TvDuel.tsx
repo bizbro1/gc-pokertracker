@@ -109,22 +109,8 @@ export function TvDuel({
       return;
     }
     playCardFlip(1);
-    if (stage === 5) {
-      setTimeout(() => playDuelWin(), 600);
-      if ("speechSynthesis" in window) {
-        try {
-          const text = chop
-            ? "The duel is chopped — the pot is split"
-            : `${challengerWins ? challenger.name : opponent.name} wins the duel and takes ${formatChips(Number(duel.chip_amount))} chips`;
-          const u = new SpeechSynthesisUtterance(text);
-          u.rate = 0.95;
-          setTimeout(() => window.speechSynthesis.speak(u), 900);
-        } catch {
-          /* speech unavailable */
-        }
-      }
-    }
-  }, [stage, muted, chop, challengerWins, challenger.name, opponent.name, duel.chip_amount]);
+    if (stage === 5) setTimeout(() => playDuelWin(), 600);
+  }, [stage, muted]);
 
   function Fighter({
     player,
@@ -196,22 +182,10 @@ export function TvDuel({
           hand={hands.a}
         />
 
-        <div className="flex flex-col items-center gap-6">
-          <div className="flex gap-3">
-            {deal.board.map((c, i) => (
-              <BigCard key={i} card={c} faceDown={i >= stage} />
-            ))}
-          </div>
-          {/* Equity bar — challenger's share, red to green with their fortunes */}
-          <div className="h-3 w-[28rem] max-w-full overflow-hidden rounded-full bg-white/10">
-            <div
-              className="h-full rounded-full transition-all duration-1000"
-              style={{ width: `${eq.a}%`, backgroundColor: pctColor(eq.a) }}
-            />
-          </div>
-          <p className="text-[10px] uppercase tracking-[0.3em] text-cream-faint">
-            {challenger.name} {eq.a}% · {opponent.name} {eq.b}%
-          </p>
+        <div className="flex gap-3">
+          {deal.board.map((c, i) => (
+            <BigCard key={i} card={c} faceDown={i >= stage} />
+          ))}
         </div>
 
         <Fighter

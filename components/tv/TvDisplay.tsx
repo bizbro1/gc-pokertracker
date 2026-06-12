@@ -213,6 +213,7 @@ export function TvDisplay({
     const announce = fresh.filter((e) => e.kind !== "duel");
     if (announce.length === 0) return;
 
+    // Silent toasts — sounds and voice on activities were more noise than fun
     setToasts((t) => [...t, ...announce].slice(-3));
     announce.forEach((e) => {
       setTimeout(
@@ -220,19 +221,6 @@ export function TvDisplay({
         6000
       );
     });
-
-    // Voice only — activity sound effects were more noise than fun
-    if (!mutedRef.current && "speechSynthesis" in window) {
-      try {
-        for (const e of announce) {
-          const u = new SpeechSynthesisUtterance(e.text);
-          u.rate = 0.95;
-          window.speechSynthesis.speak(u);
-        }
-      } catch {
-        /* speech unavailable */
-      }
-    }
   }, [events]);
 
   // Duel runouts — queue settled duels that arrive while the TV is up and
@@ -507,8 +495,9 @@ export function TvDisplay({
           </div>
         </div>
 
-        {/* Leaderboard rail — only on the clock scene */}
-        {scene === "clock" && leaderboard.length > 0 && (
+        {/* Leaderboard rail — only on the clock scene, never during a runout
+            (the updated stacks would spoil the winner) */}
+        {!duelActive && scene === "clock" && leaderboard.length > 0 && (
           <aside className="tv-scene-anim w-96 shrink-0 self-center">
             <p className="mb-3 text-center text-xs uppercase tracking-[0.35em] text-cream-dim">
               {ended ? "Final standings" : "Leaderboard"}

@@ -32,10 +32,25 @@ export default async function PlayerView({
   const me = players.find((p) => p.id === playerId);
   if (!me) redirect(`/join/${session.join_code}`);
 
-  const myStats = playerStats(session, me, txs);
+  // Chip transfers from a duel still playing out on the TV stay invisible
+  // here — a jumping stack number would spoil the runout
+  const REVEAL_MS = 35_000;
+  const freshDuels = new Set(
+    duels
+      .filter(
+        (d) =>
+          d.status === "settled" &&
+          d.settled_at &&
+          Date.now() - new Date(d.settled_at).getTime() < REVEAL_MS
+      )
+      .map((d) => d.id)
+  );
+  const visibleTxs = txs.filter((t) => !t.duel_id || !freshDuels.has(t.duel_id));
+
+  const myStats = playerStats(session, me, visibleTxs);
   const others = players
     .filter((p) => p.id !== me.id)
-    .map((p) => ({ player: p, stats: playerStats(session, p, txs) }));
+    .map((p) => ({ player: p, stats: playerStats(session, p, visibleTxs) }));
 
   return (
     <main className="mx-auto max-w-md px-5 py-8 pb-16">

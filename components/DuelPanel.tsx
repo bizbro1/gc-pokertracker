@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { cancelDuel, challengeDuel, respondToDuel } from "@/lib/actions";
 import { cn } from "@/lib/cn";
 import { formatChips } from "@/lib/format";
@@ -40,8 +41,10 @@ export function DuelPanel({
   const open = duels.find(
     (d) => d.status === "pending" && (d.challenger_id === myId || d.opponent_id === myId)
   );
-  // Most recent settled duel I was part of, fresh enough to still celebrate
-  const lastSettled = mounted
+  // The TV runout takes ~32s — phones don't learn the result before the
+  // river hits the screen
+  const REVEAL_MS = 35_000;
+  const mySettled = mounted
     ? [...duels]
         .filter(
           (d) =>
@@ -53,6 +56,20 @@ export function DuelPanel({
         .sort((a, b) => (b.settled_at ?? "").localeCompare(a.settled_at ?? ""))
         .at(0)
     : undefined;
+  const settledAge = mySettled?.settled_at
+    ? Date.now() - new Date(mySettled.settled_at).getTime()
+    : null;
+  const running = mySettled && settledAge !== null && settledAge < REVEAL_MS;
+  const lastSettled = mySettled && settledAge !== null && settledAge >= REVEAL_MS ? mySettled : undefined;
+
+  // Flip from "watch the TV" to the result (and unhide the chip transfer in
+  // the stats) the moment the runout window passes
+  const router = useRouter();
+  useEffect(() => {
+    if (!running || settledAge === null) return;
+    const t = setTimeout(() => router.refresh(), REVEAL_MS - settledAge + 500);
+    return () => clearTimeout(t);
+  }, [running, settledAge, router]);
 
   function run(fn: () => Promise<{ ok: boolean; error?: string }>) {
     setError("");
@@ -120,6 +137,10 @@ export function DuelPanel({
               </Button>
             </div>
           )
+        ) : running ? (
+          <p className="py-4 text-center text-sm text-brass animate-pulse">
+            ⚔ The cards are in the air — eyes on the TV
+          </p>
         ) : (
           <>
             {lastSettled && (
