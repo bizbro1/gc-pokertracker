@@ -9,7 +9,6 @@ import { deriveTvEvents, TvEvent } from "@/lib/tvEvents";
 import { Duel, Player, Session, Tx } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { PnL, StatusBadge } from "@/components/ui";
-import { playEventSound } from "./sounds";
 import { TvDuel } from "./TvDuel";
 import {
   buildLeaderboard,
@@ -36,7 +35,7 @@ type TvSceneId =
 
 const SCENE_INTERVAL_MS = 2 * 60 * 1000;
 const CLOCK_SNAP_BACK_MS = 60 * 1000;
-const DUEL_SHOW_MS = 30 * 1000;
+const DUEL_SHOW_MS = 32 * 1000;
 
 const SCENE_LABELS: Record<TvSceneId, string> = {
   clock: "Clock",
@@ -222,23 +221,16 @@ export function TvDisplay({
       );
     });
 
-    if (!mutedRef.current) {
-      // Sound effect first (staggered when several land at once), voice after
-      announce.slice(0, 3).forEach((e, i) => {
-        setTimeout(() => {
-          if (!mutedRef.current) playEventSound(e.kind);
-        }, i * 700);
-      });
-      if ("speechSynthesis" in window) {
-        try {
-          for (const e of announce) {
-            const u = new SpeechSynthesisUtterance(e.text);
-            u.rate = 0.95;
-            window.speechSynthesis.speak(u);
-          }
-        } catch {
-          /* speech unavailable */
+    // Voice only — activity sound effects were more noise than fun
+    if (!mutedRef.current && "speechSynthesis" in window) {
+      try {
+        for (const e of announce) {
+          const u = new SpeechSynthesisUtterance(e.text);
+          u.rate = 0.95;
+          window.speechSynthesis.speak(u);
         }
+      } catch {
+        /* speech unavailable */
       }
     }
   }, [events]);

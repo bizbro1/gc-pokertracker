@@ -9,8 +9,22 @@ import { Duel, Player } from "@/lib/types";
 import { Avatar } from "@/components/Avatar";
 import { playCardFlip, playDuelWin, playEventSound } from "./sounds";
 
-/** Stage boundaries (seconds into the show): flop, turn, river. */
-const STAGE_AT = [6, 12, 18];
+/** Seconds into the show when board card i flips — one at a time. */
+const REVEAL_AT = [5, 9, 13, 17, 21];
+
+const STAGE_LABEL = [
+  "Pre-flop",
+  "First card",
+  "Second card",
+  "The Flop",
+  "The Turn",
+  "The River",
+];
+
+/** Red at low equity, green at high — hue 0 (red) → 120 (green). */
+function pctColor(pct: number): string {
+  return `hsl(${Math.round(pct * 1.2)}, 52%, 60%)`;
+}
 
 function BigCard({ card, faceDown }: { card?: PlayingCard; faceDown?: boolean }) {
   if (faceDown || !card) {
@@ -36,9 +50,9 @@ function BigCard({ card, faceDown }: { card?: PlayingCard; faceDown?: boolean })
 }
 
 /**
- * The all-in runout: holes up, then flop → turn → river with live equities,
- * winner crowned at the end. Pure display — the result was decided
- * server-side when the duel was accepted.
+ * The all-in runout: holes up, then the board one card at a time with a
+ * fresh equity number after every card, winner crowned at the end. Pure
+ * display — the result was decided server-side when the duel was accepted.
  */
 export function TvDuel({
   duel,
@@ -59,26 +73,21 @@ export function TvDuel({
 }) {
   const deal = duel.deal!;
   const t = (now - startedAt) / 1000;
-  // 0 = pre-flop, 1 = flop, 2 = turn, 3 = river/winner
-  const stage = t < STAGE_AT[0]! ? 0 : t < STAGE_AT[1]! ? 1 : t < STAGE_AT[2]! ? 2 : 3;
-  const revealed = [0, 3, 4, 5][stage]!;
+  /** number of board cards revealed so far, 0..5 */
+  const stage = REVEAL_AT.filter((s) => t >= s).length;
+  const decided = stage === 5;
 
   const equities = useMemo(() => duelEquities(deal), [deal]);
 
   const challengerWins = duel.winner_id === challenger.id;
   const chop = duel.winner_id === null;
-  const eq =
-    stage === 0
-      ? equities.preflop
-      : stage === 1
-        ? equities.flop
-        : stage === 2
-          ? equities.turn
-          : chop
-            ? { a: 50, b: 50 }
-            : challengerWins
-              ? { a: 100, b: 0 }
-              : { a: 0, b: 100 };
+  const eq = decided
+    ? chop
+      ? { a: 50, b: 50 }
+      : challengerWins
+        ? { a: 100, b: 0 }
+        : { a: 0, b: 100 }
+    : equities[stage]!;
 
   const hands = useMemo(
     () => ({
@@ -92,13 +101,15 @@ export function TvDuel({
   const prevStage = useRef(-1);
   useEffect(() => {
     if (stage === prevStage.current) return;
+    const first = prevStage.current === -1;
     prevStage.current = stage;
     if (muted) return;
-    if (stage === 0) playEventSound("duel_challenge");
-    if (stage === 1) playCardFlip(3);
-    if (stage === 2) playCardFlip(1);
-    if (stage === 3) {
-      playCardFlip(1);
+    if (first && stage === 0) {
+      playEventSound("duel_challenge");
+      return;
+    }
+    playCardFlip(1);
+    if (stage === 5) {
       setTimeout(() => playDuelWin(), 600);
       if ("speechSynthesis" in window) {
         try {
@@ -115,24 +126,19 @@ export function TvDuel({
     }
   }, [stage, muted, chop, challengerWins, challenger.name, opponent.name, duel.chip_amount]);
 
-  const STAGE_LABEL = ["Pre-flop", "The Flop", "The Turn", "The River"];
-
   function Fighter({
     player,
     hole,
     pct,
     winner,
     hand,
-    side,
   }: {
     player: Player;
     hole: PlayingCard[];
     pct: number;
     winner: boolean;
     hand: string;
-    side: "left" | "right";
   }) {
-    const decided = stage === 3;
     return (
       <div
         className={cn(
@@ -152,10 +158,8 @@ export function TvDuel({
           ))}
         </div>
         <p
-          className={cn(
-            "font-display text-6xl tabular-nums transition-all duration-700",
-            decided && winner ? "text-brass-bright" : "text-cream"
-          )}
+          className="font-display text-6xl tabular-nums transition-colors duration-700"
+          style={{ color: pctColor(pct) }}
         >
           {pct}%
         </p>
@@ -165,9 +169,7 @@ export function TvDuel({
           </p>
         )}
         {decided && winner && !chop && (
-          <p className="text-xs uppercase tracking-[0.3em] text-brass-bright" data-side={side}>
-            Takes the pot
-          </p>
+          <p className="text-xs uppercase tracking-[0.3em] text-brass-bright">Takes the pot</p>
         )}
       </div>
     );
@@ -181,7 +183,7 @@ export function TvDuel({
           {formatChips(Number(duel.chip_amount))} chips on the line
         </p>
         <p className="mt-1 text-xs uppercase tracking-[0.3em] text-cream-dim">
-          {stage === 3 && chop ? "Chopped — split pot" : STAGE_LABEL[stage]}
+          {decided && chop ? "Chopped — split pot" : STAGE_LABEL[stage]}
         </p>
       </div>
 
@@ -192,20 +194,19 @@ export function TvDuel({
           pct={eq.a}
           winner={challengerWins}
           hand={hands.a}
-          side="left"
         />
 
         <div className="flex flex-col items-center gap-6">
           <div className="flex gap-3">
             {deal.board.map((c, i) => (
-              <BigCard key={i} card={c} faceDown={i >= revealed} />
+              <BigCard key={i} card={c} faceDown={i >= stage} />
             ))}
           </div>
-          {/* Equity bar */}
+          {/* Equity bar — challenger's share, red to green with their fortunes */}
           <div className="h-3 w-[28rem] max-w-full overflow-hidden rounded-full bg-white/10">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-brass-dim to-brass-bright transition-all duration-1000"
-              style={{ width: `${eq.a}%` }}
+              className="h-full rounded-full transition-all duration-1000"
+              style={{ width: `${eq.a}%`, backgroundColor: pctColor(eq.a) }}
             />
           </div>
           <p className="text-[10px] uppercase tracking-[0.3em] text-cream-faint">
@@ -219,7 +220,6 @@ export function TvDuel({
           pct={eq.b}
           winner={!challengerWins && !chop}
           hand={hands.b}
-          side="right"
         />
       </div>
     </div>

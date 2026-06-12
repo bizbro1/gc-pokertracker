@@ -1,7 +1,7 @@
-// Stage-by-stage win equity for a duel runout, computed from the spectator's
-// view at each street: only the cards revealed so far are known, the rest of
-// the deck is live. Flop and turn are exact enumerations; pre-flop uses
-// Monte Carlo (1.7M exact boards is too slow for a TV frame).
+// Per-street win equity for a duel runout, from the spectator's view: only
+// the board cards revealed so far are known, the rest of the deck is live.
+// With 1-2 cards to come the enumeration is exact; with 3+ to come it's
+// Monte Carlo (exact would be millions of boards).
 
 import { cardKey, compareScores, evaluate7, PlayingCard, RANKS, SUITS } from "./poker";
 import { DuelDeal } from "./types";
@@ -12,18 +12,14 @@ export interface Equity {
   b: number;
 }
 
-export interface DuelEquities {
-  preflop: Equity;
-  flop: Equity;
-  turn: Equity;
-}
+const MC_SAMPLES = 1500;
 
 function tally(holeA: PlayingCard[], holeB: PlayingCard[], board: PlayingCard[]) {
   const cmp = compareScores(
     evaluate7([...holeA, ...board]).score,
     evaluate7([...holeB, ...board]).score
   );
-  return cmp > 0 ? [1, 0] : cmp < 0 ? [0, 1] : [0.5, 0.5];
+  return cmp > 0 ? 1 : cmp < 0 ? 0 : 0.5;
 }
 
 function toEquity(aWins: number, total: number): Equity {
@@ -45,43 +41,46 @@ function liveDeck(deal: DuelDeal, revealed: number): PlayingCard[] {
   return deck;
 }
 
-export function duelEquities(deal: DuelDeal): DuelEquities {
+function equityAt(deal: DuelDeal, revealed: number): Equity {
   const [holeA, holeB] = deal.holes;
+  const partial = deal.board.slice(0, revealed);
+  const live = liveDeck(deal, revealed);
+  const need = 5 - revealed;
 
-  // Pre-flop: Monte Carlo over 5-card boards from the 48 unseen cards
-  const pre = liveDeck(deal, 0);
-  const SAMPLES = 2500;
-  let aPre = 0;
-  for (let s = 0; s < SAMPLES; s++) {
-    // partial Fisher-Yates: first 5 of a fresh shuffle
-    const deck = pre.slice();
-    for (let i = 0; i < 5; i++) {
-      const j = i + Math.floor(Math.random() * (deck.length - i));
-      [deck[i], deck[j]] = [deck[j]!, deck[i]!];
+  let aWins = 0;
+  let total = 0;
+
+  if (need === 1) {
+    for (const c of live) {
+      aWins += tally(holeA, holeB, [...partial, c]);
+      total++;
     }
-    aPre += tally(holeA, holeB, deck.slice(0, 5))[0]!;
+  } else if (need === 2) {
+    for (let i = 0; i < live.length; i++)
+      for (let j = i + 1; j < live.length; j++) {
+        aWins += tally(holeA, holeB, [...partial, live[i]!, live[j]!]);
+        total++;
+      }
+  } else {
+    for (let s = 0; s < MC_SAMPLES; s++) {
+      // partial Fisher-Yates: first `need` of a fresh shuffle
+      const deck = live.slice();
+      for (let i = 0; i < need; i++) {
+        const j = i + Math.floor(Math.random() * (deck.length - i));
+        [deck[i], deck[j]] = [deck[j]!, deck[i]!];
+      }
+      aWins += tally(holeA, holeB, [...partial, ...deck.slice(0, need)]);
+      total++;
+    }
   }
 
-  // Flop: exact over C(45,2) turn/river pairs
-  const flop = deal.board.slice(0, 3);
-  const liveFlop = liveDeck(deal, 3);
-  let aFlop = 0;
-  let nFlop = 0;
-  for (let i = 0; i < liveFlop.length; i++)
-    for (let j = i + 1; j < liveFlop.length; j++) {
-      aFlop += tally(holeA, holeB, [...flop, liveFlop[i]!, liveFlop[j]!])[0]!;
-      nFlop++;
-    }
+  return toEquity(aWins, total);
+}
 
-  // Turn: exact over the 44 possible rivers
-  const four = deal.board.slice(0, 4);
-  const liveTurn = liveDeck(deal, 4);
-  let aTurn = 0;
-  for (const river of liveTurn) aTurn += tally(holeA, holeB, [...four, river])[0]!;
-
-  return {
-    preflop: toEquity(aPre, SAMPLES),
-    flop: toEquity(aFlop, nFlop),
-    turn: toEquity(aTurn, liveTurn.length),
-  };
+/**
+ * equities[r] = win equity with r board cards revealed, r = 0..4 — one
+ * fresh number after every single card. The 5th card decides the winner.
+ */
+export function duelEquities(deal: DuelDeal): Equity[] {
+  return [0, 1, 2, 3, 4].map((r) => equityAt(deal, r));
 }
